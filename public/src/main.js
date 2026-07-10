@@ -20,6 +20,10 @@ const state = {
   lockOn: true
 };
 
+const ROOM_HALF_SIZE = 9;
+const PLAYER_VISUAL_SCALE = 0.74;
+const MANNEQUIN_VISUAL_SCALE = 0.72;
+
 const initialEnvironments = [
   {
     id: "bujin",
@@ -424,6 +428,7 @@ function renderTrialRoom() {
   const canvas = document.getElementById("threeCanvas");
   const trailCanvas = document.getElementById("attackTrailCanvas");
   const stage = document.getElementById("arenaStage");
+
   trainingScene = new TrainingScene3D({
     canvas,
     trailCanvas,
@@ -431,6 +436,7 @@ function renderTrialRoom() {
     getWeapon: () => getSelectedWeapon(),
     getLockOn: () => state.lockOn
   });
+
   trainingScene.start();
 }
 
@@ -526,6 +532,7 @@ document.addEventListener("click", (event) => {
 
   if (action === "toggle-lock") {
     state.lockOn = !state.lockOn;
+
     if (state.screen === SCREENS.TRIAL_ROOM) {
       const lockButton = document.querySelector(".lock-btn");
       if (lockButton) {
@@ -533,11 +540,13 @@ document.addEventListener("click", (event) => {
         lockButton.classList.toggle("active", state.lockOn);
       }
     }
+
     return;
   }
 
   if (action === "select-weapon") {
     state.selectedWeaponId = target.dataset.weapon;
+
     if (state.screen === SCREENS.TRIAL_ROOM) {
       renderTrialRoom();
     }
@@ -560,13 +569,20 @@ class TrainingScene3D {
     this.frameId = 0;
 
     this.player = {
-      position: new THREE.Vector3(0, 0, 2.8),
+      position: new THREE.Vector3(0, 0, 4.1),
       yaw: Math.PI,
-      speed: 3.3
+      speed: 4.0
     };
 
     this.keys = new Set();
-    this.joystick = { active: false, x: 0, y: 0, pointerId: null };
+
+    this.joystick = {
+      active: false,
+      x: 0,
+      y: 0,
+      pointerId: null
+    };
+
     this.pointerAttack = {
       active: false,
       startX: 0,
@@ -593,8 +609,10 @@ class TrainingScene3D {
     this.weaponPivot = null;
     this.playerGroup = null;
     this.mannequinGroup = null;
-    this.cameraTarget = new THREE.Vector3();
-    this.cameraCurrent = new THREE.Vector3(0, 4, 7);
+
+    this.cameraTarget = new THREE.Vector3(0, 1.15, 0);
+    this.cameraCurrent = new THREE.Vector3(0, 4.8, 9.2);
+
     this.lastWeaponId = null;
 
     this.trailCtx = this.trailCanvas.getContext("2d");
@@ -613,10 +631,16 @@ class TrainingScene3D {
   start() {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a0d14);
-    this.scene.fog = new THREE.Fog(0x0a0d14, 9, 20);
+    this.scene.fog = new THREE.Fog(0x0a0d14, 13, 28);
 
-    this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 100);
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: false });
+    this.camera = new THREE.PerspectiveCamera(56, 1, 0.1, 100);
+
+    this.renderer = new THREE.WebGLRenderer({
+      canvas: this.canvas,
+      antialias: true,
+      alpha: false
+    });
+
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -681,14 +705,19 @@ class TrainingScene3D {
     this.scene.add(ambient);
 
     const key = new THREE.DirectionalLight(0xffffff, 2.6);
-    key.position.set(4, 7, 5);
+    key.position.set(5, 8, 6);
     key.castShadow = true;
     key.shadow.mapSize.width = 2048;
     key.shadow.mapSize.height = 2048;
     this.scene.add(key);
 
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x151a24, roughness: 0.85, metalness: 0.03 });
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), floorMat);
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x151a24,
+      roughness: 0.85,
+      metalness: 0.03
+    });
+
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_HALF_SIZE * 2, ROOM_HALF_SIZE * 2), floorMat);
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     this.scene.add(floor);
@@ -701,37 +730,58 @@ class TrainingScene3D {
     this.scene.add(this.playerGroup);
 
     this.mannequinGroup = this.createMannequin();
-    this.mannequinGroup.position.set(0, 0, -2.1);
+    this.mannequinGroup.position.set(0, 0, -3.2);
+    this.mannequinGroup.scale.setScalar(MANNEQUIN_VISUAL_SCALE);
     this.scene.add(this.mannequinGroup);
 
     this.createWeaponForSelected();
   }
 
   addRoomWalls() {
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x202838, roughness: 0.9 });
-    const backWall = new THREE.Mesh(new THREE.BoxGeometry(12, 3.2, 0.14), wallMat);
-    backWall.position.set(0, 1.6, -6);
+    const wallMat = new THREE.MeshStandardMaterial({
+      color: 0x202838,
+      roughness: 0.9
+    });
+
+    const wallLength = ROOM_HALF_SIZE * 2;
+    const wallHeight = 3.2;
+
+    const backWall = new THREE.Mesh(new THREE.BoxGeometry(wallLength, wallHeight, 0.14), wallMat);
+    backWall.position.set(0, wallHeight / 2, -ROOM_HALF_SIZE);
     backWall.receiveShadow = true;
     this.scene.add(backWall);
 
-    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.2, 12), wallMat);
-    leftWall.position.set(-6, 1.6, 0);
+    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.14, wallHeight, wallLength), wallMat);
+    leftWall.position.set(-ROOM_HALF_SIZE, wallHeight / 2, 0);
     leftWall.receiveShadow = true;
     this.scene.add(leftWall);
 
-    const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.2, 12), wallMat);
-    rightWall.position.set(6, 1.6, 0);
+    const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.14, wallHeight, wallLength), wallMat);
+    rightWall.position.set(ROOM_HALF_SIZE, wallHeight / 2, 0);
     rightWall.receiveShadow = true;
     this.scene.add(rightWall);
   }
 
   addGridLines() {
-    const mat = new THREE.LineBasicMaterial({ color: 0x344057, transparent: true, opacity: 0.32 });
+    const mat = new THREE.LineBasicMaterial({
+      color: 0x344057,
+      transparent: true,
+      opacity: 0.28
+    });
+
     const group = new THREE.Group();
 
-    for (let i = -6; i <= 6; i += 1) {
-      const pointsA = [new THREE.Vector3(i, 0.012, -6), new THREE.Vector3(i, 0.012, 6)];
-      const pointsB = [new THREE.Vector3(-6, 0.012, i), new THREE.Vector3(6, 0.012, i)];
+    for (let i = -ROOM_HALF_SIZE; i <= ROOM_HALF_SIZE; i += 1) {
+      const pointsA = [
+        new THREE.Vector3(i, 0.012, -ROOM_HALF_SIZE),
+        new THREE.Vector3(i, 0.012, ROOM_HALF_SIZE)
+      ];
+
+      const pointsB = [
+        new THREE.Vector3(-ROOM_HALF_SIZE, 0.012, i),
+        new THREE.Vector3(ROOM_HALF_SIZE, 0.012, i)
+      ];
+
       group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pointsA), mat));
       group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pointsB), mat));
     }
@@ -740,17 +790,23 @@ class TrainingScene3D {
   }
 
   addWeaponRack() {
-    const mat = new THREE.MeshStandardMaterial({ color: 0x6f5531, roughness: 0.8 });
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x6f5531,
+      roughness: 0.8
+    });
+
     const rack = new THREE.Group();
-    rack.position.set(-4.7, 0, -3.8);
+    rack.position.set(-7.0, 0, -5.8);
 
     const postA = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.6, 0.12), mat);
     postA.position.set(-0.45, 0.8, 0);
+
     const postB = postA.clone();
     postB.position.x = 0.45;
 
     const barA = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.10, 0.10), mat);
     barA.position.set(0, 1.25, 0);
+
     const barB = barA.clone();
     barB.position.y = 0.75;
 
@@ -761,9 +817,20 @@ class TrainingScene3D {
   createPlayer() {
     const group = new THREE.Group();
 
-    const cloth = new THREE.MeshStandardMaterial({ color: 0x3a465d, roughness: 0.7 });
-    const skin = new THREE.MeshStandardMaterial({ color: 0xd8ad78, roughness: 0.72 });
-    const accent = new THREE.MeshStandardMaterial({ color: 0xd9b56f, roughness: 0.55 });
+    const cloth = new THREE.MeshStandardMaterial({
+      color: 0x3a465d,
+      roughness: 0.7
+    });
+
+    const skin = new THREE.MeshStandardMaterial({
+      color: 0xd8ad78,
+      roughness: 0.72
+    });
+
+    const accent = new THREE.MeshStandardMaterial({
+      color: 0xd9b56f,
+      roughness: 0.55
+    });
 
     const body = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.38, 0.95, 16), cloth);
     body.position.y = 1.05;
@@ -776,6 +843,7 @@ class TrainingScene3D {
     const leftLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.12, 0.75, 12), cloth);
     leftLeg.position.set(-0.16, 0.38, 0);
     leftLeg.castShadow = true;
+
     const rightLeg = leftLeg.clone();
     rightLeg.position.x = 0.16;
 
@@ -797,13 +865,25 @@ class TrainingScene3D {
     this.weaponPivot.position.set(0.38, 1.15, -0.28);
 
     group.add(body, head, leftLeg, rightLeg, leftArm, rightArm, facingMark, this.weaponPivot);
+    group.scale.setScalar(PLAYER_VISUAL_SCALE);
+
     return group;
   }
 
   createMannequin() {
     const group = new THREE.Group();
-    const wood = new THREE.MeshStandardMaterial({ color: 0x9b7447, roughness: 0.92 });
-    const marker = new THREE.MeshStandardMaterial({ color: 0xd9b56f, roughness: 0.6, emissive: 0x3a2500, emissiveIntensity: 0.05 });
+
+    const wood = new THREE.MeshStandardMaterial({
+      color: 0x9b7447,
+      roughness: 0.92
+    });
+
+    const marker = new THREE.MeshStandardMaterial({
+      color: 0xd9b56f,
+      roughness: 0.6,
+      emissive: 0x3a2500,
+      emissiveIntensity: 0.05
+    });
 
     const base = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.54, 0.14, 24), wood);
     base.position.y = 0.07;
@@ -827,21 +907,26 @@ class TrainingScene3D {
     line.castShadow = true;
 
     const armGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.82, 12);
+
     const leftArm = new THREE.Mesh(armGeo, wood);
     leftArm.position.set(-0.43, 1.28, 0);
     leftArm.rotation.z = Math.PI / 2.7;
     leftArm.castShadow = true;
+
     const rightArm = leftArm.clone();
     rightArm.position.x = 0.43;
     rightArm.rotation.z = -Math.PI / 2.7;
 
     group.add(base, pole, torso, head, line, leftArm, rightArm);
+
     return group;
   }
 
   createWeaponForSelected() {
     const weapon = this.getWeapon();
+
     if (this.lastWeaponId === weapon.id && this.weaponMeshGroup) return;
+
     this.lastWeaponId = weapon.id;
 
     if (this.weaponMeshGroup) {
@@ -854,14 +939,25 @@ class TrainingScene3D {
 
   createWeaponMesh(weapon) {
     const group = new THREE.Group();
-    const material = new THREE.MeshStandardMaterial({ color: weapon.color, roughness: 0.48, metalness: 0.12 });
-    const gripMat = new THREE.MeshStandardMaterial({ color: 0x3c2b1f, roughness: 0.8 });
+
+    const material = new THREE.MeshStandardMaterial({
+      color: weapon.color,
+      roughness: 0.48,
+      metalness: 0.12
+    });
+
+    const gripMat = new THREE.MeshStandardMaterial({
+      color: 0x3c2b1f,
+      roughness: 0.8
+    });
 
     if (weapon.type === "hand") {
       const fistA = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 16), material);
       fistA.position.set(0.05, 0, -0.34);
+
       const fistB = fistA.clone();
       fistB.position.x = -0.08;
+
       group.add(fistA, fistB);
       return group;
     }
@@ -879,7 +975,12 @@ class TrainingScene3D {
     }
 
     if (weapon.type === "special") {
-      const linkMat = new THREE.MeshStandardMaterial({ color: weapon.color, roughness: 0.42, metalness: 0.35 });
+      const linkMat = new THREE.MeshStandardMaterial({
+        color: weapon.color,
+        roughness: 0.42,
+        metalness: 0.35
+      });
+
       for (let i = 0; i < 7; i += 1) {
         const link = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.012, 8, 18), linkMat);
         link.position.z = -0.18 - i * 0.15;
@@ -887,9 +988,11 @@ class TrainingScene3D {
         link.rotation.z = i % 2 === 0 ? 0 : Math.PI / 2;
         group.add(link);
       }
+
       const end = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 16), linkMat);
       end.position.z = -1.28;
       group.add(end);
+
       return group;
     }
 
@@ -916,6 +1019,7 @@ class TrainingScene3D {
     const shortBlade = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.025, weapon.length), material);
     shortBlade.position.z = -0.18 - weapon.length / 2;
     group.add(shortBlade);
+
     return group;
   }
 
@@ -925,23 +1029,28 @@ class TrainingScene3D {
     const height = Math.max(1, Math.floor(rect.height));
 
     this.renderer.setSize(width, height, false);
+
     this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
 
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
     this.trailCanvas.width = Math.floor(width * dpr);
     this.trailCanvas.height = Math.floor(height * dpr);
     this.trailCanvas.style.width = `${width}px`;
     this.trailCanvas.style.height = `${height}px`;
+
     this.trailCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
   loop() {
     if (!this.running) return;
+
     const dt = Math.min(this.clock.getDelta(), 0.033);
 
     this.createWeaponForSelected();
     this.update(dt);
+
     this.renderer.render(this.scene, this.camera);
     this.drawAttackTrail();
 
@@ -969,7 +1078,10 @@ class TrainingScene3D {
     z += this.joystick.y;
 
     const input = new THREE.Vector3(x, 0, z);
-    if (input.lengthSq() > 1) input.normalize();
+
+    if (input.lengthSq() > 1) {
+      input.normalize();
+    }
 
     if (input.lengthSq() > 0.001) {
       const cameraForward = new THREE.Vector3();
@@ -977,15 +1089,20 @@ class TrainingScene3D {
       cameraForward.y = 0;
       cameraForward.normalize();
 
-      const cameraRight = new THREE.Vector3().crossVectors(cameraForward, new THREE.Vector3(0, 1, 0)).normalize();
+      const cameraRight = new THREE.Vector3()
+        .crossVectors(cameraForward, new THREE.Vector3(0, 1, 0))
+        .normalize();
+
       const move = new THREE.Vector3()
         .addScaledVector(cameraRight, input.x)
         .addScaledVector(cameraForward, -input.z)
         .normalize();
 
       this.player.position.addScaledVector(move, this.player.speed * dt);
-      this.player.position.x = clamp(this.player.position.x, -4.8, 4.8);
-      this.player.position.z = clamp(this.player.position.z, -4.8, 4.8);
+
+      const moveLimit = ROOM_HALF_SIZE - 1.2;
+      this.player.position.x = clamp(this.player.position.x, -moveLimit, moveLimit);
+      this.player.position.z = clamp(this.player.position.z, -moveLimit, moveLimit);
 
       if (!this.getLockOn()) {
         this.player.yaw = Math.atan2(-move.x, -move.z);
@@ -1000,10 +1117,12 @@ class TrainingScene3D {
     if (!this.getLockOn()) return;
 
     const target = this.mannequinGroup.position;
+
     const dx = target.x - this.player.position.x;
     const dz = target.z - this.player.position.z;
+
     const desired = Math.atan2(-dx, -dz);
-    this.player.yaw = smoothAngle(this.player.yaw, desired, 1 - Math.exp(-9 * dt));
+    this.player.yaw = smoothAngle(this.player.yaw, desired, 1 - Math.exp(-8.5 * dt));
   }
 
   updateAttack(dt) {
@@ -1031,57 +1150,100 @@ class TrainingScene3D {
   }
 
   updateCamera(dt) {
-    const target = new THREE.Vector3().copy(this.player.position);
-    target.y = 1.15;
+    const playerPoint = new THREE.Vector3().copy(this.player.position);
+    playerPoint.y = 1.1;
+
+    const mannequinPoint = new THREE.Vector3().copy(this.mannequinGroup.position);
+    mannequinPoint.y = 1.15 * MANNEQUIN_VISUAL_SCALE;
 
     let desiredPosition;
 
     if (this.getLockOn()) {
-      const lockTarget = new THREE.Vector3().copy(this.mannequinGroup.position);
-      lockTarget.y = 1.25;
+      const center = new THREE.Vector3()
+        .copy(playerPoint)
+        .lerp(mannequinPoint, 0.48);
 
-      const away = new THREE.Vector3().subVectors(this.player.position, lockTarget);
+      const playerToTarget = new THREE.Vector3()
+        .subVectors(mannequinPoint, playerPoint);
+
+      const distance = Math.max(1.0, playerToTarget.length());
+
+      const away = new THREE.Vector3()
+        .subVectors(playerPoint, mannequinPoint);
+
       away.y = 0;
-      if (away.lengthSq() < 0.001) away.set(0, 0, 1);
+
+      if (away.lengthSq() < 0.001) {
+        away.set(0, 0, 1);
+      }
+
       away.normalize();
 
-      desiredPosition = new THREE.Vector3()
-        .copy(this.player.position)
-        .addScaledVector(away, 4.1)
-        .add(new THREE.Vector3(0, 2.4, 0));
+      const side = new THREE.Vector3()
+        .crossVectors(new THREE.Vector3(0, 1, 0), away)
+        .normalize();
 
-      this.cameraTarget.lerp(lockTarget, 1 - Math.exp(-8 * dt));
+      const cameraDistance = clamp(distance * 0.85 + 5.3, 6.4, 9.2);
+      const cameraHeight = clamp(distance * 0.28 + 3.0, 3.4, 5.0);
+
+      desiredPosition = new THREE.Vector3()
+        .copy(center)
+        .addScaledVector(away, cameraDistance)
+        .addScaledVector(side, 0.85)
+        .add(new THREE.Vector3(0, cameraHeight, 0));
+
+      const lookTarget = new THREE.Vector3()
+        .copy(center);
+
+      lookTarget.y = 1.05;
+
+      this.cameraTarget.lerp(lookTarget, 1 - Math.exp(-6.5 * dt));
     } else {
-      const back = new THREE.Vector3(Math.sin(this.player.yaw), 0, Math.cos(this.player.yaw));
+      const back = new THREE.Vector3(
+        Math.sin(this.player.yaw),
+        0,
+        Math.cos(this.player.yaw)
+      );
+
       desiredPosition = new THREE.Vector3()
         .copy(this.player.position)
-        .addScaledVector(back, 4.2)
-        .add(new THREE.Vector3(0, 2.4, 0));
+        .addScaledVector(back, 6.4)
+        .add(new THREE.Vector3(0, 3.8, 0));
 
       const forwardLook = new THREE.Vector3()
         .copy(this.player.position)
-        .addScaledVector(back, -2.5);
-      forwardLook.y = 1.2;
-      this.cameraTarget.lerp(forwardLook, 1 - Math.exp(-7 * dt));
+        .addScaledVector(back, -3.4);
+
+      forwardLook.y = 1.15;
+
+      this.cameraTarget.lerp(forwardLook, 1 - Math.exp(-5.8 * dt));
     }
 
-    this.cameraCurrent.lerp(desiredPosition, 1 - Math.exp(-7 * dt));
+    this.cameraCurrent.lerp(desiredPosition, 1 - Math.exp(-5.8 * dt));
+
     this.camera.position.copy(this.cameraCurrent);
     this.camera.lookAt(this.cameraTarget);
   }
 
   updateHitReaction(dt) {
     const tip = this.getWeaponTipWorldPosition();
+
     const target = new THREE.Vector3().copy(this.mannequinGroup.position);
-    target.y = 1.25;
+    target.y = 1.05 * MANNEQUIN_VISUAL_SCALE;
 
     const distance = tip.distanceTo(target);
-    if (distance < 0.55) {
+
+    if (distance < 0.48) {
       this.attack.flash = 1;
     }
 
-    const scale = 1 + this.attack.flash * 0.035;
-    this.mannequinGroup.scale.set(scale, 1 + this.attack.flash * 0.02, scale);
+    const hitScale = 1 + this.attack.flash * 0.035;
+
+    this.mannequinGroup.scale.set(
+      MANNEQUIN_VISUAL_SCALE * hitScale,
+      MANNEQUIN_VISUAL_SCALE * (1 + this.attack.flash * 0.02),
+      MANNEQUIN_VISUAL_SCALE * hitScale
+    );
 
     this.mannequinGroup.traverse((obj) => {
       if (obj.isMesh && obj.material && obj.material.emissive) {
@@ -1092,7 +1254,13 @@ class TrainingScene3D {
 
   getWeaponTipWorldPosition() {
     const weapon = this.getWeapon();
-    const localTip = new THREE.Vector3(0, 0, -Math.max(0.42, weapon.length + 0.22));
+
+    const localTip = new THREE.Vector3(
+      0,
+      0,
+      -Math.max(0.42, weapon.length + 0.22)
+    );
+
     return this.weaponPivot.localToWorld(localTip.clone());
   }
 
@@ -1100,6 +1268,7 @@ class TrainingScene3D {
     if (event.target.closest?.(".move-stick")) return;
 
     this.canvas.setPointerCapture?.(event.pointerId);
+
     const point = this.getStagePoint(event);
 
     this.pointerAttack.active = true;
@@ -1115,27 +1284,35 @@ class TrainingScene3D {
 
   onAttackMove(event) {
     if (!this.pointerAttack.active) return;
+
     const point = this.getStagePoint(event);
 
     const width = this.stage.clientWidth;
     const height = this.stage.clientHeight;
+
     const dx = (point.x - this.pointerAttack.lastX) / Math.max(1, width);
     const dy = (point.y - this.pointerAttack.lastY) / Math.max(1, height);
 
     this.attack.targetSwingX = clamp(this.attack.targetSwingX + dx * 9.5, -1.25, 1.25);
     this.attack.targetSwingY = clamp(this.attack.targetSwingY + dy * 7.5, -1.05, 1.05);
 
-    this.pointerAttack.lastX = this.pointerAttack.x;
-    this.pointerAttack.lastY = this.pointerAttack.y;
+    this.pointerAttack.lastX = point.x;
+    this.pointerAttack.lastY = point.y;
     this.pointerAttack.x = point.x;
     this.pointerAttack.y = point.y;
-    this.pointerAttack.points.push({ x: point.x, y: point.y, life: 1 });
+
+    this.pointerAttack.points.push({
+      x: point.x,
+      y: point.y,
+      life: 1
+    });
   }
 
   onAttackUp(event) {
     if (!this.pointerAttack.active) return;
 
     const point = this.getStagePoint(event);
+
     const totalDx = point.x - this.pointerAttack.startX;
     const totalDy = point.y - this.pointerAttack.startY;
     const distance = Math.sqrt(totalDx * totalDx + totalDy * totalDy);
@@ -1151,15 +1328,19 @@ class TrainingScene3D {
   onStickDown(event) {
     event.preventDefault();
     event.stopPropagation();
+
     this.joystick.active = true;
     this.joystick.pointerId = event.pointerId;
+
     this.updateStick(event);
   }
 
   onStickMove(event) {
     if (!this.joystick.active || event.pointerId !== this.joystick.pointerId) return;
+
     event.preventDefault();
     event.stopPropagation();
+
     this.updateStick(event);
   }
 
@@ -1171,32 +1352,40 @@ class TrainingScene3D {
     this.joystick.pointerId = null;
     this.joystick.x = 0;
     this.joystick.y = 0;
+
     this.updateStickKnob(0, 0);
   }
 
   updateStick(event) {
     const stick = document.getElementById("moveStick");
     if (!stick) return;
+
     const rect = stick.getBoundingClientRect();
+
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
+
     const max = rect.width * 0.34;
+
     const dx = clamp(event.clientX - centerX, -max, max);
     const dy = clamp(event.clientY - centerY, -max, max);
 
     this.joystick.x = dx / max;
     this.joystick.y = dy / max;
+
     this.updateStickKnob(dx, dy);
   }
 
   updateStickKnob(dx, dy) {
     const knob = document.getElementById("moveStickKnob");
     if (!knob) return;
+
     knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
   }
 
   getStagePoint(event) {
     const rect = this.stage.getBoundingClientRect();
+
     return {
       x: clamp(event.clientX - rect.left, 0, rect.width),
       y: clamp(event.clientY - rect.top, 0, rect.height)
@@ -1213,6 +1402,7 @@ class TrainingScene3D {
     for (const point of this.pointerAttack.points) {
       point.life -= 0.025;
     }
+
     this.pointerAttack.points = this.pointerAttack.points.filter((point) => point.life > 0);
 
     if (this.pointerAttack.points.length < 2) return;
@@ -1224,9 +1414,12 @@ class TrainingScene3D {
     for (let i = 1; i < this.pointerAttack.points.length; i += 1) {
       const a = this.pointerAttack.points[i - 1];
       const b = this.pointerAttack.points[i];
+
       const alpha = Math.max(0, Math.min(a.life, b.life));
+
       ctx.strokeStyle = `rgba(217, 181, 111, ${alpha * 0.8})`;
       ctx.lineWidth = 4 + alpha * 4;
+
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(b.x, b.y);
@@ -1247,8 +1440,10 @@ function lerp(a, b, t) {
 
 function smoothAngle(current, target, t) {
   let diff = target - current;
+
   while (diff > Math.PI) diff -= Math.PI * 2;
   while (diff < -Math.PI) diff += Math.PI * 2;
+
   return current + diff * t;
 }
 
