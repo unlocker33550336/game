@@ -60,8 +60,16 @@ button {
   place-items: center;
 }
 
+.trial-screen {
+  align-items: start;
+}
+
 .shell {
   width: min(1120px, 100%);
+}
+
+.wide-shell {
+  width: min(1380px, 100%);
 }
 
 .hero {
@@ -256,6 +264,10 @@ p {
   align-items: stretch;
 }
 
+.three-layout {
+  grid-template-columns: 300px 1fr;
+}
+
 .side-panel {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -353,6 +365,247 @@ p {
   font-size: 0.9rem;
 }
 
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.guide-card {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 16px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.045);
+  padding: 16px;
+}
+
+.guide-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.guide-illust {
+  min-height: 120px;
+  border: 1px solid rgba(217, 181, 111, 0.25);
+  border-radius: 18px;
+  background: rgba(217, 181, 111, 0.07);
+  display: grid;
+  place-items: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.keys-illust {
+  grid-template-columns: repeat(3, 38px);
+  grid-template-rows: repeat(3, 32px);
+  gap: 5px;
+  justify-content: center;
+  align-content: center;
+}
+
+.keys-illust b,
+.keys-illust i {
+  width: 38px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
+  font-style: normal;
+}
+
+.keys-illust i::before {
+  content: "●";
+  color: var(--accent);
+}
+
+.draw-illust svg {
+  width: 88%;
+  height: 88%;
+}
+
+.draw-illust path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tap-illust {
+  gap: 4px;
+}
+
+.tap-button {
+  border: 1px solid rgba(217, 181, 111, 0.7);
+  background: rgba(217, 181, 111, 0.12);
+  border-radius: 999px;
+  padding: 12px 20px;
+  font-weight: 900;
+}
+
+.tap-arrow {
+  color: var(--accent);
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.lock-illust {
+  grid-template-columns: 1fr;
+  gap: 8px;
+}
+
+.lock-target {
+  font-size: 3rem;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.lock-label {
+  text-align: center;
+  color: var(--muted);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.arena-stage {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  min-height: 680px;
+  overflow: hidden;
+  background: #080b12;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.22);
+}
+
+#threeCanvas,
+.attack-trail-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+#threeCanvas {
+  touch-action: none;
+}
+
+.attack-trail-canvas {
+  pointer-events: none;
+  z-index: 3;
+}
+
+.combat-overlay {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.top-overlay {
+  top: 14px;
+  left: 14px;
+  right: 14px;
+  justify-content: space-between;
+}
+
+.lock-btn {
+  pointer-events: auto;
+  border: 1px solid var(--line-strong);
+  background: rgba(8, 10, 15, 0.72);
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-weight: 900;
+  cursor: pointer;
+  backdrop-filter: blur(10px);
+}
+
+.lock-btn.active {
+  border-color: rgba(217, 181, 111, 0.8);
+  background: rgba(217, 181, 111, 0.16);
+  color: var(--accent);
+}
+
+.overlay-hint {
+  color: var(--muted);
+  background: rgba(8, 10, 15, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 12px;
+  backdrop-filter: blur(10px);
+  font-size: 0.9rem;
+}
+
+.move-stick {
+  position: absolute;
+  z-index: 6;
+  left: 24px;
+  bottom: 24px;
+  width: 128px;
+  height: 128px;
+  border-radius: 999px;
+  touch-action: none;
+}
+
+.move-stick-base {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+  background: rgba(8, 10, 15, 0.46);
+  backdrop-filter: blur(8px);
+}
+
+.move-stick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(217, 181, 111, 0.70);
+  background: rgba(217, 181, 111, 0.20);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.28);
+}
+
+.attack-zone-hint {
+  position: absolute;
+  z-index: 4;
+  right: 28px;
+  bottom: 34px;
+  color: rgba(244, 247, 251, 0.52);
+  border: 1px dashed rgba(255, 255, 255, 0.20);
+  border-radius: 18px;
+  padding: 12px 14px;
+  background: rgba(8, 10, 15, 0.30);
+  pointer-events: none;
+}
+
+@media (max-width: 1050px) {
+  .three-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .side-panel {
+    min-height: auto;
+  }
+
+  .arena-stage {
+    min-height: 620px;
+  }
+}
+
 @media (max-width: 900px) {
   .screen {
     padding: 18px;
@@ -360,7 +613,8 @@ p {
 
   .grid.cards-4,
   .grid.cards-3,
-  .grid.cards-2 {
+  .grid.cards-2,
+  .guide-grid {
     grid-template-columns: 1fr;
   }
 
@@ -379,5 +633,45 @@ p {
 
   .board-row {
     grid-template-columns: 1fr;
+  }
+
+  .guide-card {
+    grid-template-columns: 1fr;
+  }
+
+  .arena-stage {
+    min-height: 560px;
+  }
+}
+
+@media (max-width: 520px) {
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .weapon-list {
+    grid-template-columns: 1fr;
+  }
+
+  .move-stick {
+    width: 112px;
+    height: 112px;
+    left: 16px;
+    bottom: 16px;
+  }
+
+  .move-stick-knob {
+    width: 48px;
+    height: 48px;
+  }
+
+  .attack-zone-hint {
+    right: 16px;
+    bottom: 24px;
+  }
+
+  .overlay-hint {
+    display: none;
   }
 }
