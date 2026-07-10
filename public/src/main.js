@@ -1,4 +1,5 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+import RAPIER from "https://cdn.skypack.dev/@dimforge/rapier3d-compat";
 
 const app = document.getElementById("app");
 
@@ -23,6 +24,16 @@ const state = {
 const ROOM_HALF_SIZE = 9;
 const PLAYER_VISUAL_SCALE = 0.74;
 const MANNEQUIN_VISUAL_SCALE = 0.72;
+
+let rapierInitPromise = null;
+
+function ensureRapierReady() {
+  if (!rapierInitPromise) {
+    rapierInitPromise = RAPIER.init();
+  }
+
+  return rapierInitPromise;
+}
 
 const initialEnvironments = [
   {
@@ -393,6 +404,7 @@ function renderTrialRoom() {
               <div>攻撃：マウスドラッグ / 画面をなぞる</div>
               <div>突き・殴り：クリック / タップ</div>
               <div>視点：ロックオン中は自動追尾</div>
+              <div>物理：床・壁・マネキンとの衝突</div>
               <div>未実装：ダメージ、成長、流派効果、対人戦</div>
             </div>
 
@@ -568,6 +580,12 @@ class TrainingScene3D {
     this.running = false;
     this.frameId = 0;
 
+    this.physicsWorld = null;
+    this.characterController = null;
+    this.playerBody = null;
+    this.playerCollider = null;
+    this.playerColliderCenterY = 0.70;
+
     this.player = {
       position: new THREE.Vector3(0, 0, 4.1),
       yaw: Math.PI,
@@ -628,7 +646,13 @@ class TrainingScene3D {
     this.boundStickUp = (event) => this.onStickUp(event);
   }
 
-  start() {
+  async start() {
+    this.running = true;
+
+    await ensureRapierReady();
+
+    if (!this.running) return;
+
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0a0d14);
     this.scene.fog = new THREE.Fog(0x0a0d14, 13, 28);
@@ -645,11 +669,11 @@ class TrainingScene3D {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
+    this.buildPhysics();
     this.buildScene();
     this.bindEvents();
     this.resize();
 
-    this.running = true;
     this.clock.start();
     this.loop();
   }
@@ -659,9 +683,18 @@ class TrainingScene3D {
     cancelAnimationFrame(this.frameId);
     this.unbindEvents();
 
+    if (this.physicsWorld && this.characterController) {
+      this.physicsWorld.removeCharacterController(this.characterController);
+    }
+
     if (this.renderer) {
       this.renderer.dispose();
     }
+
+    this.physicsWorld = null;
+    this.characterController = null;
+    this.playerBody = null;
+    this.playerCollider = null;
   }
 
   bindEvents() {
@@ -698,6 +731,61 @@ class TrainingScene3D {
       window.removeEventListener("pointerup", this.boundStickUp);
       window.removeEventListener("pointercancel", this.boundStickUp);
     }
+  }
+
+  buildPhysics() {
+    const gravity = { x: 0.0, y: 0.0, z: 0.0 };
+    this.physicsWorld = new RAPIER.World(gravity);
+
+    const floorCollider = RAPIER.ColliderDesc
+      .cuboid(ROOM_HALF_SIZE, 0.06, ROOM_HALF_SIZE)
+      .setTranslation(0, -0.06, 0);
+
+    this.physicsWorld.createCollider(floorCollider);
+
+    const wallHeight = 3.2;
+    const wallThickness = 0.16;
+
+    const backWallCollider = RAPIER.ColliderDesc
+      .cuboid(ROOM_HALF_SIZE, wallHeight / 2, wallThickness / 2)
+      .setTranslation(0, wallHeight / 2, -ROOM_HALF_SIZE);
+
+    const frontWallCollider = RAPIER.ColliderDesc
+      .cuboid(ROOM_HALF_SIZE, wallHeight / 2, wallThickness / 2)
+      .setTranslation(0, wallHeight / 2, ROOM_HALF_SIZE);
+
+    const leftWallCollider = RAPIER.ColliderDesc
+      .cuboid(wallThickness / 2, wallHeight / 2, ROOM_HALF_SIZE)
+      .setTranslation(-ROOM_HALF_SIZE, wallHeight / 2, 0);
+
+    const rightWallCollider = RAPIER.ColliderDesc
+      .cuboid(wallThickness / 2, wallHeight / 2, ROOM_HALF_SIZE)
+      .setTranslation(ROOM_HALF_SIZE, wallHeight / 2, 0);
+
+    this.physicsWorld.createCollider(backWallCollider);
+    this.physicsWorld.createCollider(frontWallCollider);
+    this.physicsWorld.createCollider(leftWallCollider);
+    this.physicsWorld.createCollider(rightWallCollider);
+
+    const mannequinCollider = RAPIER.ColliderDesc
+      .capsule(0.46, 0.28)
+      .setTranslation(0, 0.70, -3.2);
+
+    this.physicsWorld.createCollider(mannequinCollider);
+
+    const playerBodyDesc = RAPIER.RigidBodyDesc
+      .kinematicPositionBased()
+      .setTranslation(this.player.position.x, this.playerColliderCenterY, this.player.position.z);
+
+    this.playerBody = this.physicsWorld.createRigidBody(playerBodyDesc);
+
+    const playerColliderDesc = RAPIER.ColliderDesc
+      .capsule(0.46, 0.24);
+
+    this.playerCollider = this.physicsWorld.createCollider(playerColliderDesc, this.playerBody);
+
+    this.characterController = this.physicsWorld.createCharacterController(0.035);
+    this.characterController.setUp({ x: 0, y: 1, z: 0 });
   }
 
   buildScene() {
@@ -1083,6 +1171,9 @@ class TrainingScene3D {
       input.normalize();
     }
 
+    let desiredMove = new THREE.Vector3(0, 0, 0);
+    let visualMove = new THREE.Vector3(0, 0, 0);
+
     if (input.lengthSq() > 0.001) {
       const cameraForward = new THREE.Vector3();
       this.camera.getWorldDirection(cameraForward);
@@ -1093,20 +1184,56 @@ class TrainingScene3D {
         .crossVectors(cameraForward, new THREE.Vector3(0, 1, 0))
         .normalize();
 
-      const move = new THREE.Vector3()
+      visualMove = new THREE.Vector3()
         .addScaledVector(cameraRight, input.x)
-        .addScaledVector(cameraForward, -input.z)
-        .normalize();
+        .addScaledVector(cameraForward, -input.z);
 
-      this.player.position.addScaledVector(move, this.player.speed * dt);
+      if (visualMove.lengthSq() > 0.001) {
+        visualMove.normalize();
+      }
+
+      desiredMove = visualMove.clone().multiplyScalar(this.player.speed * dt);
+    }
+
+    if (this.physicsWorld && this.characterController && this.playerCollider && this.playerBody) {
+      this.characterController.computeColliderMovement(
+        this.playerCollider,
+        {
+          x: desiredMove.x,
+          y: 0,
+          z: desiredMove.z
+        }
+      );
+
+      const correctedMove = this.characterController.computedMovement();
+      const currentTranslation = this.playerBody.translation();
+
+      const nextTranslation = {
+        x: currentTranslation.x + correctedMove.x,
+        y: this.playerColliderCenterY,
+        z: currentTranslation.z + correctedMove.z
+      };
+
+      this.playerBody.setNextKinematicTranslation(nextTranslation);
+      this.physicsWorld.step();
+
+      const newTranslation = this.playerBody.translation();
+
+      this.player.position.set(
+        newTranslation.x,
+        0,
+        newTranslation.z
+      );
+    } else {
+      this.player.position.add(desiredMove);
 
       const moveLimit = ROOM_HALF_SIZE - 1.2;
       this.player.position.x = clamp(this.player.position.x, -moveLimit, moveLimit);
       this.player.position.z = clamp(this.player.position.z, -moveLimit, moveLimit);
+    }
 
-      if (!this.getLockOn()) {
-        this.player.yaw = Math.atan2(-move.x, -move.z);
-      }
+    if (input.lengthSq() > 0.001 && !this.getLockOn() && visualMove.lengthSq() > 0.001) {
+      this.player.yaw = Math.atan2(-visualMove.x, -visualMove.z);
     }
 
     this.playerGroup.position.copy(this.player.position);
