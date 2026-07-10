@@ -1,3 +1,5 @@
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+
 const app = document.getElementById("app");
 
 const SCREENS = {
@@ -6,6 +8,7 @@ const SCREENS = {
   MARTIAL_CITY: "MARTIAL_CITY",
   TRIAL_LOBBY: "TRIAL_LOBBY",
   RECEPTION: "RECEPTION",
+  CONTROL_GUIDE: "CONTROL_GUIDE",
   TRIAL_ROOM: "TRIAL_ROOM",
   STYLE_BOARD: "STYLE_BOARD"
 };
@@ -13,7 +16,8 @@ const SCREENS = {
 const state = {
   screen: SCREENS.TITLE,
   initialEnvironment: null,
-  selectedWeaponId: "barehand"
+  selectedWeaponId: "barehand",
+  lockOn: true
 };
 
 const initialEnvironments = [
@@ -75,57 +79,59 @@ const weapons = [
     id: "barehand",
     name: "素手",
     category: "素手系",
-    reach: 86,
-    thickness: 18,
-    weight: 0.45,
-    kind: "hand"
+    type: "hand",
+    length: 0.42,
+    weight: 0.65,
+    color: 0xd8ad78
   },
   {
     id: "practiceKnife",
     name: "練習用ナイフ",
     category: "ナイフ系",
-    reach: 124,
-    thickness: 10,
-    weight: 0.7,
-    kind: "short"
+    type: "short",
+    length: 0.66,
+    weight: 0.85,
+    color: 0xcfd7df
   },
   {
     id: "practiceBlade",
     name: "練習刀",
     category: "刀系",
-    reach: 188,
-    thickness: 12,
-    weight: 1.0,
-    kind: "blade"
+    type: "blade",
+    length: 1.05,
+    weight: 1.05,
+    color: 0xdfe7ee
   },
   {
     id: "practiceStaff",
     name: "練習棒",
     category: "長物系",
-    reach: 240,
-    thickness: 13,
-    weight: 1.05,
-    kind: "staff"
+    type: "staff",
+    length: 1.55,
+    weight: 1.15,
+    color: 0xb89056
   },
   {
     id: "weightedTrainer",
     name: "重り付き練習具",
     category: "重量武器系",
-    reach: 174,
-    thickness: 22,
-    weight: 1.85,
-    kind: "heavy"
+    type: "heavy",
+    length: 1.02,
+    weight: 1.95,
+    color: 0x8e959d
   },
   {
     id: "chainTrainer",
     name: "鎖状練習具",
     category: "特殊武器系",
-    reach: 212,
-    thickness: 9,
-    weight: 1.25,
-    kind: "special"
+    type: "special",
+    length: 1.22,
+    weight: 1.35,
+    color: 0xb9c3cc
   }
 ];
+
+let trainingScene = null;
 
 function setScreen(screen) {
   state.screen = screen;
@@ -260,6 +266,69 @@ function renderReception() {
         「個室内の練習具は自由にお試しください。気になる系統があれば、ロビーの案内板から対応する流派を確認できます。」
       </div>
     `,
+    actions: `<button class="btn primary" data-action="go-guide">基本操作を見る</button>`
+  });
+}
+
+function renderControlGuide() {
+  app.innerHTML = screenShell({
+    breadcrumb: "武術都市 / お試し場 / 基本操作",
+    title: "基本操作ガイド",
+    body: html`
+      <p class="muted">
+        個室に入る前に、最低限の操作だけ確認する。
+        ここでは戦い方を指定しない。動かし方だけを知って、自分で試す。
+      </p>
+
+      <div class="guide-grid">
+        <article class="guide-card">
+          <div class="guide-illust keys-illust">
+            <span></span><b>W</b><span></span>
+            <b>A</b><i></i><b>D</b>
+            <span></span><b>S</b><span></span>
+          </div>
+          <div>
+            <h3>移動</h3>
+            <p>WASD / 方向キーで移動。スマホでは左下の操作パッドで動く。</p>
+          </div>
+        </article>
+
+        <article class="guide-card">
+          <div class="guide-illust draw-illust">
+            <svg viewBox="0 0 180 120" aria-hidden="true">
+              <path d="M24 78 C58 28, 112 24, 154 70" />
+              <path d="M136 58 L154 70 L133 80" />
+            </svg>
+          </div>
+          <div>
+            <h3>軌道攻撃</h3>
+            <p>マウスドラッグ / 画面をなぞる操作で、武器や腕の軌道を描く。</p>
+          </div>
+        </article>
+
+        <article class="guide-card">
+          <div class="guide-illust tap-illust">
+            <div class="tap-button">TAP</div>
+            <div class="tap-arrow">↓</div>
+          </div>
+          <div>
+            <h3>突き・殴り</h3>
+            <p>クリック / タップで、正面へ短く出す攻撃を試す。</p>
+          </div>
+        </article>
+
+        <article class="guide-card">
+          <div class="guide-illust lock-illust">
+            <div class="lock-target">◎</div>
+            <div class="lock-label">LOCK<br>ON/OFF</div>
+          </div>
+          <div>
+            <h3>ロックオン</h3>
+            <p>ボタンでON/OFF切り替え。ONの間はマネキンを自動追尾する。</p>
+          </div>
+        </article>
+      </div>
+    `,
     actions: `<button class="btn primary" data-action="go-trial-room">個室へ移動する</button>`
   });
 }
@@ -289,23 +358,21 @@ function renderStyleBoard() {
   });
 }
 
-let trainingScene = null;
-
 function renderTrialRoom() {
   app.innerHTML = html`
-    <main class="screen">
-      <section class="shell">
+    <main class="screen trial-screen">
+      <section class="shell wide-shell">
         <div class="topbar">
           <div class="breadcrumb">武術都市 / お試し場 / 個室</div>
           <button class="btn ghost" data-action="go-lobby">ロビーへ戻る</button>
         </div>
 
-        <div class="room-layout">
+        <div class="room-layout three-layout">
           <aside class="side-panel">
             <h3>個室</h3>
             <p class="muted">
-              マネキンと練習具だけが置かれている。
-              評価表示は出ない。触って、自分で感じる。
+              3Dの個室。移動、ロックオン切り替え、マウス・タッチによる攻撃軌道を試せる。
+              評価表示は出ない。
             </p>
 
             <div class="weapon-list">
@@ -318,27 +385,52 @@ function renderTrialRoom() {
             </div>
 
             <div class="stat-box">
-              <div>操作：画面内をドラッグ / マウス移動</div>
-              <div>目的：武器の動きや距離感を試す</div>
-              <div>判定：マネキンに触れた時だけ軽い反応</div>
+              <div>移動：WASD / 方向キー / 左下パッド</div>
+              <div>攻撃：マウスドラッグ / 画面をなぞる</div>
+              <div>突き・殴り：クリック / タップ</div>
+              <div>視点：ロックオン中は自動追尾</div>
               <div>未実装：ダメージ、成長、流派効果、対人戦</div>
             </div>
 
             <div class="actions">
+              <button class="btn" data-action="go-guide">操作ガイド</button>
               <button class="btn" data-action="go-board">案内板を見る</button>
             </div>
           </aside>
 
-          <section class="canvas-wrap">
-            <canvas id="trainingCanvas" width="960" height="620" aria-label="練習用キャンバス"></canvas>
+          <section class="arena-stage" id="arenaStage">
+            <canvas id="threeCanvas" aria-label="3D練習場"></canvas>
+            <canvas id="attackTrailCanvas" class="attack-trail-canvas" aria-hidden="true"></canvas>
+
+            <div class="combat-overlay top-overlay">
+              <button class="lock-btn ${state.lockOn ? "active" : ""}" data-action="toggle-lock">
+                LOCK ${state.lockOn ? "ON" : "OFF"}
+              </button>
+              <div class="overlay-hint">マウス / タッチで軌道を描く</div>
+            </div>
+
+            <div class="move-stick" id="moveStick" aria-label="移動パッド">
+              <div class="move-stick-base"></div>
+              <div class="move-stick-knob" id="moveStickKnob"></div>
+            </div>
+
+            <div class="attack-zone-hint">攻撃エリア</div>
           </section>
         </div>
       </section>
     </main>
   `;
 
-  const canvas = document.getElementById("trainingCanvas");
-  trainingScene = new TrainingScene(canvas, () => getSelectedWeapon());
+  const canvas = document.getElementById("threeCanvas");
+  const trailCanvas = document.getElementById("attackTrailCanvas");
+  const stage = document.getElementById("arenaStage");
+  trainingScene = new TrainingScene3D({
+    canvas,
+    trailCanvas,
+    stage,
+    getWeapon: () => getSelectedWeapon(),
+    getLockOn: () => state.lockOn
+  });
   trainingScene.start();
 }
 
@@ -367,6 +459,9 @@ function render() {
       break;
     case SCREENS.RECEPTION:
       renderReception();
+      break;
+    case SCREENS.CONTROL_GUIDE:
+      renderControlGuide();
       break;
     case SCREENS.TRIAL_ROOM:
       renderTrialRoom();
@@ -414,6 +509,11 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  if (action === "go-guide") {
+    setScreen(SCREENS.CONTROL_GUIDE);
+    return;
+  }
+
   if (action === "go-trial-room") {
     setScreen(SCREENS.TRIAL_ROOM);
     return;
@@ -421,6 +521,18 @@ document.addEventListener("click", (event) => {
 
   if (action === "go-board") {
     setScreen(SCREENS.STYLE_BOARD);
+    return;
+  }
+
+  if (action === "toggle-lock") {
+    state.lockOn = !state.lockOn;
+    if (state.screen === SCREENS.TRIAL_ROOM) {
+      const lockButton = document.querySelector(".lock-btn");
+      if (lockButton) {
+        lockButton.textContent = `LOCK ${state.lockOn ? "ON" : "OFF"}`;
+        lockButton.classList.toggle("active", state.lockOn);
+      }
+    }
     return;
   }
 
@@ -432,384 +544,694 @@ document.addEventListener("click", (event) => {
   }
 });
 
-class TrainingScene {
-  constructor(canvas, getWeapon) {
+class TrainingScene3D {
+  constructor({ canvas, trailCanvas, stage, getWeapon, getLockOn }) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext("2d");
+    this.trailCanvas = trailCanvas;
+    this.stage = stage;
     this.getWeapon = getWeapon;
+    this.getLockOn = getLockOn;
+
+    this.renderer = null;
+    this.scene = null;
+    this.camera = null;
+    this.clock = new THREE.Clock();
     this.running = false;
-    this.raf = 0;
+    this.frameId = 0;
 
-    this.pointer = {
+    this.player = {
+      position: new THREE.Vector3(0, 0, 2.8),
+      yaw: Math.PI,
+      speed: 3.3
+    };
+
+    this.keys = new Set();
+    this.joystick = { active: false, x: 0, y: 0, pointerId: null };
+    this.pointerAttack = {
       active: false,
-      x: 0.58,
-      y: 0.58,
-      lastX: 0.58,
-      lastY: 0.58,
-      speed: 0
+      startX: 0,
+      startY: 0,
+      x: 0,
+      y: 0,
+      lastX: 0,
+      lastY: 0,
+      startTime: 0,
+      points: []
     };
 
-    this.hand = {
-      x: 0.5,
-      y: 0.82,
-      tx: 0.58,
-      ty: 0.58
+    this.attack = {
+      swingX: 0,
+      swingY: 0,
+      targetSwingX: 0,
+      targetSwingY: 0,
+      thrust: 0,
+      thrustVelocity: 0,
+      flash: 0
     };
 
-    this.trail = [];
-    this.hitFlash = 0;
-    this.lastTime = performance.now();
+    this.weaponMeshGroup = null;
+    this.weaponPivot = null;
+    this.playerGroup = null;
+    this.mannequinGroup = null;
+    this.cameraTarget = new THREE.Vector3();
+    this.cameraCurrent = new THREE.Vector3(0, 4, 7);
+    this.lastWeaponId = null;
+
+    this.trailCtx = this.trailCanvas.getContext("2d");
 
     this.boundResize = () => this.resize();
-    this.boundPointerDown = (event) => this.onPointerDown(event);
-    this.boundPointerMove = (event) => this.onPointerMove(event);
-    this.boundPointerUp = () => this.onPointerUp();
+    this.boundKeyDown = (event) => this.keys.add(event.key.toLowerCase());
+    this.boundKeyUp = (event) => this.keys.delete(event.key.toLowerCase());
+    this.boundAttackDown = (event) => this.onAttackDown(event);
+    this.boundAttackMove = (event) => this.onAttackMove(event);
+    this.boundAttackUp = (event) => this.onAttackUp(event);
+    this.boundStickDown = (event) => this.onStickDown(event);
+    this.boundStickMove = (event) => this.onStickMove(event);
+    this.boundStickUp = (event) => this.onStickUp(event);
   }
 
   start() {
-    this.running = true;
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x0a0d14);
+    this.scene.fog = new THREE.Fog(0x0a0d14, 9, 20);
+
+    this.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 100);
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, alpha: false });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    this.buildScene();
+    this.bindEvents();
     this.resize();
 
-    window.addEventListener("resize", this.boundResize);
-    this.canvas.addEventListener("pointerdown", this.boundPointerDown);
-    this.canvas.addEventListener("pointermove", this.boundPointerMove);
-    window.addEventListener("pointerup", this.boundPointerUp);
-    this.canvas.addEventListener("pointerleave", this.boundPointerUp);
-
-    this.lastTime = performance.now();
-    this.loop(this.lastTime);
+    this.running = true;
+    this.clock.start();
+    this.loop();
   }
 
   stop() {
     this.running = false;
-    cancelAnimationFrame(this.raf);
+    cancelAnimationFrame(this.frameId);
+    this.unbindEvents();
 
+    if (this.renderer) {
+      this.renderer.dispose();
+    }
+  }
+
+  bindEvents() {
+    window.addEventListener("resize", this.boundResize);
+    window.addEventListener("keydown", this.boundKeyDown);
+    window.addEventListener("keyup", this.boundKeyUp);
+
+    this.canvas.addEventListener("pointerdown", this.boundAttackDown);
+    this.canvas.addEventListener("pointermove", this.boundAttackMove);
+    window.addEventListener("pointerup", this.boundAttackUp);
+
+    const stick = document.getElementById("moveStick");
+    if (stick) {
+      stick.addEventListener("pointerdown", this.boundStickDown);
+      stick.addEventListener("pointermove", this.boundStickMove);
+      window.addEventListener("pointerup", this.boundStickUp);
+      window.addEventListener("pointercancel", this.boundStickUp);
+    }
+  }
+
+  unbindEvents() {
     window.removeEventListener("resize", this.boundResize);
-    this.canvas.removeEventListener("pointerdown", this.boundPointerDown);
-    this.canvas.removeEventListener("pointermove", this.boundPointerMove);
-    window.removeEventListener("pointerup", this.boundPointerUp);
-    this.canvas.removeEventListener("pointerleave", this.boundPointerUp);
+    window.removeEventListener("keydown", this.boundKeyDown);
+    window.removeEventListener("keyup", this.boundKeyUp);
+
+    this.canvas.removeEventListener("pointerdown", this.boundAttackDown);
+    this.canvas.removeEventListener("pointermove", this.boundAttackMove);
+    window.removeEventListener("pointerup", this.boundAttackUp);
+
+    const stick = document.getElementById("moveStick");
+    if (stick) {
+      stick.removeEventListener("pointerdown", this.boundStickDown);
+      stick.removeEventListener("pointermove", this.boundStickMove);
+      window.removeEventListener("pointerup", this.boundStickUp);
+      window.removeEventListener("pointercancel", this.boundStickUp);
+    }
+  }
+
+  buildScene() {
+    const ambient = new THREE.HemisphereLight(0xdce8ff, 0x1d2430, 1.8);
+    this.scene.add(ambient);
+
+    const key = new THREE.DirectionalLight(0xffffff, 2.6);
+    key.position.set(4, 7, 5);
+    key.castShadow = true;
+    key.shadow.mapSize.width = 2048;
+    key.shadow.mapSize.height = 2048;
+    this.scene.add(key);
+
+    const floorMat = new THREE.MeshStandardMaterial({ color: 0x151a24, roughness: 0.85, metalness: 0.03 });
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(12, 12), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    this.scene.add(floor);
+
+    this.addRoomWalls();
+    this.addGridLines();
+    this.addWeaponRack();
+
+    this.playerGroup = this.createPlayer();
+    this.scene.add(this.playerGroup);
+
+    this.mannequinGroup = this.createMannequin();
+    this.mannequinGroup.position.set(0, 0, -2.1);
+    this.scene.add(this.mannequinGroup);
+
+    this.createWeaponForSelected();
+  }
+
+  addRoomWalls() {
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x202838, roughness: 0.9 });
+    const backWall = new THREE.Mesh(new THREE.BoxGeometry(12, 3.2, 0.14), wallMat);
+    backWall.position.set(0, 1.6, -6);
+    backWall.receiveShadow = true;
+    this.scene.add(backWall);
+
+    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.2, 12), wallMat);
+    leftWall.position.set(-6, 1.6, 0);
+    leftWall.receiveShadow = true;
+    this.scene.add(leftWall);
+
+    const rightWall = new THREE.Mesh(new THREE.BoxGeometry(0.14, 3.2, 12), wallMat);
+    rightWall.position.set(6, 1.6, 0);
+    rightWall.receiveShadow = true;
+    this.scene.add(rightWall);
+  }
+
+  addGridLines() {
+    const mat = new THREE.LineBasicMaterial({ color: 0x344057, transparent: true, opacity: 0.32 });
+    const group = new THREE.Group();
+
+    for (let i = -6; i <= 6; i += 1) {
+      const pointsA = [new THREE.Vector3(i, 0.012, -6), new THREE.Vector3(i, 0.012, 6)];
+      const pointsB = [new THREE.Vector3(-6, 0.012, i), new THREE.Vector3(6, 0.012, i)];
+      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pointsA), mat));
+      group.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pointsB), mat));
+    }
+
+    this.scene.add(group);
+  }
+
+  addWeaponRack() {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x6f5531, roughness: 0.8 });
+    const rack = new THREE.Group();
+    rack.position.set(-4.7, 0, -3.8);
+
+    const postA = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.6, 0.12), mat);
+    postA.position.set(-0.45, 0.8, 0);
+    const postB = postA.clone();
+    postB.position.x = 0.45;
+
+    const barA = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.10, 0.10), mat);
+    barA.position.set(0, 1.25, 0);
+    const barB = barA.clone();
+    barB.position.y = 0.75;
+
+    rack.add(postA, postB, barA, barB);
+    this.scene.add(rack);
+  }
+
+  createPlayer() {
+    const group = new THREE.Group();
+
+    const cloth = new THREE.MeshStandardMaterial({ color: 0x3a465d, roughness: 0.7 });
+    const skin = new THREE.MeshStandardMaterial({ color: 0xd8ad78, roughness: 0.72 });
+    const accent = new THREE.MeshStandardMaterial({ color: 0xd9b56f, roughness: 0.55 });
+
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.38, 0.95, 16), cloth);
+    body.position.y = 1.05;
+    body.castShadow = true;
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 20), skin);
+    head.position.y = 1.72;
+    head.castShadow = true;
+
+    const leftLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.12, 0.75, 12), cloth);
+    leftLeg.position.set(-0.16, 0.38, 0);
+    leftLeg.castShadow = true;
+    const rightLeg = leftLeg.clone();
+    rightLeg.position.x = 0.16;
+
+    const leftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.72, 12), cloth);
+    leftArm.position.set(-0.42, 1.12, -0.08);
+    leftArm.rotation.z = 0.18;
+    leftArm.castShadow = true;
+
+    const rightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.72, 12), cloth);
+    rightArm.position.set(0.42, 1.12, -0.08);
+    rightArm.rotation.z = -0.18;
+    rightArm.castShadow = true;
+
+    const facingMark = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.24), accent);
+    facingMark.position.set(0, 1.43, -0.34);
+    facingMark.castShadow = true;
+
+    this.weaponPivot = new THREE.Group();
+    this.weaponPivot.position.set(0.38, 1.15, -0.28);
+
+    group.add(body, head, leftLeg, rightLeg, leftArm, rightArm, facingMark, this.weaponPivot);
+    return group;
+  }
+
+  createMannequin() {
+    const group = new THREE.Group();
+    const wood = new THREE.MeshStandardMaterial({ color: 0x9b7447, roughness: 0.92 });
+    const marker = new THREE.MeshStandardMaterial({ color: 0xd9b56f, roughness: 0.6, emissive: 0x3a2500, emissiveIntensity: 0.05 });
+
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.54, 0.14, 24), wood);
+    base.position.y = 0.07;
+    base.castShadow = true;
+    base.receiveShadow = true;
+
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.75, 16), wood);
+    pole.position.y = 0.95;
+    pole.castShadow = true;
+
+    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 0.72, 18), wood);
+    torso.position.y = 1.18;
+    torso.castShadow = true;
+
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 20), wood);
+    head.position.y = 1.68;
+    head.castShadow = true;
+
+    const line = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.32), marker);
+    line.position.set(0, 1.42, -0.25);
+    line.castShadow = true;
+
+    const armGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.82, 12);
+    const leftArm = new THREE.Mesh(armGeo, wood);
+    leftArm.position.set(-0.43, 1.28, 0);
+    leftArm.rotation.z = Math.PI / 2.7;
+    leftArm.castShadow = true;
+    const rightArm = leftArm.clone();
+    rightArm.position.x = 0.43;
+    rightArm.rotation.z = -Math.PI / 2.7;
+
+    group.add(base, pole, torso, head, line, leftArm, rightArm);
+    return group;
+  }
+
+  createWeaponForSelected() {
+    const weapon = this.getWeapon();
+    if (this.lastWeaponId === weapon.id && this.weaponMeshGroup) return;
+    this.lastWeaponId = weapon.id;
+
+    if (this.weaponMeshGroup) {
+      this.weaponPivot.remove(this.weaponMeshGroup);
+    }
+
+    this.weaponMeshGroup = this.createWeaponMesh(weapon);
+    this.weaponPivot.add(this.weaponMeshGroup);
+  }
+
+  createWeaponMesh(weapon) {
+    const group = new THREE.Group();
+    const material = new THREE.MeshStandardMaterial({ color: weapon.color, roughness: 0.48, metalness: 0.12 });
+    const gripMat = new THREE.MeshStandardMaterial({ color: 0x3c2b1f, roughness: 0.8 });
+
+    if (weapon.type === "hand") {
+      const fistA = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 16), material);
+      fistA.position.set(0.05, 0, -0.34);
+      const fistB = fistA.clone();
+      fistB.position.x = -0.08;
+      group.add(fistA, fistB);
+      return group;
+    }
+
+    if (weapon.type === "heavy") {
+      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, weapon.length, 16), gripMat);
+      handle.rotation.x = Math.PI / 2;
+      handle.position.z = -weapon.length / 2;
+
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.26, 0.28), material);
+      head.position.z = -weapon.length - 0.10;
+
+      group.add(handle, head);
+      return group;
+    }
+
+    if (weapon.type === "special") {
+      const linkMat = new THREE.MeshStandardMaterial({ color: weapon.color, roughness: 0.42, metalness: 0.35 });
+      for (let i = 0; i < 7; i += 1) {
+        const link = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.012, 8, 18), linkMat);
+        link.position.z = -0.18 - i * 0.15;
+        link.rotation.x = Math.PI / 2;
+        link.rotation.z = i % 2 === 0 ? 0 : Math.PI / 2;
+        group.add(link);
+      }
+      const end = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 16), linkMat);
+      end.position.z = -1.28;
+      group.add(end);
+      return group;
+    }
+
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.32, 16), gripMat);
+    handle.rotation.x = Math.PI / 2;
+    handle.position.z = -0.16;
+    group.add(handle);
+
+    if (weapon.type === "staff") {
+      const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, weapon.length, 16), material);
+      staff.rotation.x = Math.PI / 2;
+      staff.position.z = -weapon.length / 2;
+      group.add(staff);
+      return group;
+    }
+
+    if (weapon.type === "blade") {
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.025, weapon.length), material);
+      blade.position.z = -0.26 - weapon.length / 2;
+      group.add(blade);
+      return group;
+    }
+
+    const shortBlade = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.025, weapon.length), material);
+    shortBlade.position.z = -0.18 - weapon.length / 2;
+    group.add(shortBlade);
+    return group;
   }
 
   resize() {
-    const rect = this.canvas.getBoundingClientRect();
-    const dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2));
-    this.canvas.width = Math.floor(rect.width * dpr);
-    this.canvas.height = Math.floor(rect.height * dpr);
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const rect = this.stage.getBoundingClientRect();
+    const width = Math.max(1, Math.floor(rect.width));
+    const height = Math.max(1, Math.floor(rect.height));
+
+    this.renderer.setSize(width, height, false);
+    this.camera.aspect = width / height;
+    this.camera.updateProjectionMatrix();
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.trailCanvas.width = Math.floor(width * dpr);
+    this.trailCanvas.height = Math.floor(height * dpr);
+    this.trailCanvas.style.width = `${width}px`;
+    this.trailCanvas.style.height = `${height}px`;
+    this.trailCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  getSize() {
-    const rect = this.canvas.getBoundingClientRect();
-    return {
-      w: rect.width,
-      h: rect.height
-    };
-  }
-
-  onPointerDown(event) {
-    this.canvas.setPointerCapture?.(event.pointerId);
-    this.pointer.active = true;
-    this.updatePointer(event);
-  }
-
-  onPointerMove(event) {
-    this.updatePointer(event);
-  }
-
-  onPointerUp() {
-    this.pointer.active = false;
-  }
-
-  updatePointer(event) {
-    const rect = this.canvas.getBoundingClientRect();
-    const x = clamp((event.clientX - rect.left) / rect.width, 0.05, 0.95);
-    const y = clamp((event.clientY - rect.top) / rect.height, 0.08, 0.92);
-
-    const dx = x - this.pointer.x;
-    const dy = y - this.pointer.y;
-    this.pointer.lastX = this.pointer.x;
-    this.pointer.lastY = this.pointer.y;
-    this.pointer.x = x;
-    this.pointer.y = y;
-    this.pointer.speed = Math.sqrt(dx * dx + dy * dy);
-  }
-
-  loop(time) {
+  loop() {
     if (!this.running) return;
+    const dt = Math.min(this.clock.getDelta(), 0.033);
 
-    const dt = Math.min(0.033, (time - this.lastTime) / 1000);
-    this.lastTime = time;
+    this.createWeaponForSelected();
     this.update(dt);
-    this.draw();
+    this.renderer.render(this.scene, this.camera);
+    this.drawAttackTrail();
 
-    this.raf = requestAnimationFrame((nextTime) => this.loop(nextTime));
+    this.frameId = requestAnimationFrame(() => this.loop());
   }
 
   update(dt) {
-    const weapon = this.getWeapon();
-    const response = clamp(9 / weapon.weight, 3.5, 12);
-
-    this.hand.tx = this.pointer.x;
-    this.hand.ty = this.pointer.y;
-
-    this.hand.x = lerp(this.hand.x, this.hand.tx, 1 - Math.exp(-response * dt));
-    this.hand.y = lerp(this.hand.y, this.hand.ty, 1 - Math.exp(-response * dt));
-
-    const size = this.getSize();
-    const pose = this.computeWeaponPose(size, weapon);
-    const hit = this.checkMannequinHit(pose.tipX, pose.tipY, size);
-
-    if (hit) {
-      this.hitFlash = 1;
-    } else {
-      this.hitFlash = Math.max(0, this.hitFlash - dt * 3.4);
-    }
-
-    this.trail.push({
-      x: pose.tipX,
-      y: pose.tipY,
-      life: 1,
-      hit
-    });
-
-    for (const point of this.trail) {
-      point.life -= dt * 1.8;
-    }
-    this.trail = this.trail.filter((point) => point.life > 0).slice(-42);
+    this.updateMovement(dt);
+    this.updateFacing(dt);
+    this.updateAttack(dt);
+    this.updateCamera(dt);
+    this.updateHitReaction(dt);
   }
 
-  computeWeaponPose(size, weapon) {
-    const baseX = size.w * 0.5;
-    const baseY = size.h * 0.92;
-    const targetX = this.hand.x * size.w;
-    const targetY = this.hand.y * size.h;
+  updateMovement(dt) {
+    let x = 0;
+    let z = 0;
 
-    const dx = targetX - baseX;
-    const dy = targetY - baseY;
-    const len = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-    const nx = dx / len;
-    const ny = dy / len;
+    if (this.keys.has("w") || this.keys.has("arrowup")) z -= 1;
+    if (this.keys.has("s") || this.keys.has("arrowdown")) z += 1;
+    if (this.keys.has("a") || this.keys.has("arrowleft")) x -= 1;
+    if (this.keys.has("d") || this.keys.has("arrowright")) x += 1;
 
-    const reachScale = Math.min(size.w, size.h) / 620;
-    const reach = weapon.reach * reachScale;
-    const handReach = weapon.kind === "hand" ? reach : reach * 0.42;
+    x += this.joystick.x;
+    z += this.joystick.y;
 
-    const handX = baseX + nx * Math.min(len, handReach);
-    const handY = baseY + ny * Math.min(len, handReach);
-    const tipX = baseX + nx * Math.min(len + reach * 0.42, reach);
-    const tipY = baseY + ny * Math.min(len + reach * 0.42, reach);
+    const input = new THREE.Vector3(x, 0, z);
+    if (input.lengthSq() > 1) input.normalize();
 
-    return {
-      baseX,
-      baseY,
-      handX,
-      handY,
-      tipX,
-      tipY,
-      nx,
-      ny
-    };
-  }
+    if (input.lengthSq() > 0.001) {
+      const cameraForward = new THREE.Vector3();
+      this.camera.getWorldDirection(cameraForward);
+      cameraForward.y = 0;
+      cameraForward.normalize();
 
-  checkMannequinHit(x, y, size) {
-    const dummy = this.getDummy(size);
-    return (
-      pointInCircle(x, y, dummy.head.x, dummy.head.y, dummy.head.r) ||
-      pointInRoundedRect(x, y, dummy.body.x, dummy.body.y, dummy.body.w, dummy.body.h, 20) ||
-      pointNearLine(x, y, dummy.leftArm.x1, dummy.leftArm.y1, dummy.leftArm.x2, dummy.leftArm.y2, 16) ||
-      pointNearLine(x, y, dummy.rightArm.x1, dummy.rightArm.y1, dummy.rightArm.x2, dummy.rightArm.y2, 16)
-    );
-  }
+      const cameraRight = new THREE.Vector3().crossVectors(cameraForward, new THREE.Vector3(0, 1, 0)).normalize();
+      const move = new THREE.Vector3()
+        .addScaledVector(cameraRight, input.x)
+        .addScaledVector(cameraForward, -input.z)
+        .normalize();
 
-  getDummy(size) {
-    const cx = size.w * 0.5;
-    const top = size.h * 0.17;
-    const scale = Math.min(size.w, size.h) / 620;
+      this.player.position.addScaledVector(move, this.player.speed * dt);
+      this.player.position.x = clamp(this.player.position.x, -4.8, 4.8);
+      this.player.position.z = clamp(this.player.position.z, -4.8, 4.8);
 
-    return {
-      head: { x: cx, y: top + 58 * scale, r: 34 * scale },
-      body: { x: cx - 55 * scale, y: top + 98 * scale, w: 110 * scale, h: 150 * scale },
-      leftArm: { x1: cx - 55 * scale, y1: top + 120 * scale, x2: cx - 116 * scale, y2: top + 188 * scale },
-      rightArm: { x1: cx + 55 * scale, y1: top + 120 * scale, x2: cx + 116 * scale, y2: top + 188 * scale },
-      leftLeg: { x1: cx - 26 * scale, y1: top + 248 * scale, x2: cx - 60 * scale, y2: top + 344 * scale },
-      rightLeg: { x1: cx + 26 * scale, y1: top + 248 * scale, x2: cx + 60 * scale, y2: top + 344 * scale }
-    };
-  }
-
-  draw() {
-    const ctx = this.ctx;
-    const size = this.getSize();
-    ctx.clearRect(0, 0, size.w, size.h);
-
-    this.drawRoom(ctx, size);
-    this.drawMannequin(ctx, size);
-    this.drawTrail(ctx);
-    this.drawPlayerHandsAndWeapon(ctx, size);
-    this.drawHud(ctx, size);
-  }
-
-  drawRoom(ctx, size) {
-    const gradient = ctx.createLinearGradient(0, 0, 0, size.h);
-    gradient.addColorStop(0, "#111827");
-    gradient.addColorStop(0.58, "#0b0f18");
-    gradient.addColorStop(1, "#07090e");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, size.w, size.h);
-
-    ctx.strokeStyle = "rgba(255,255,255,0.055)";
-    ctx.lineWidth = 1;
-    const grid = 56;
-    for (let x = size.w * 0.5; x < size.w; x += grid) line(ctx, x, 0, x, size.h);
-    for (let x = size.w * 0.5; x > 0; x -= grid) line(ctx, x, 0, x, size.h);
-
-    ctx.strokeStyle = "rgba(217,181,111,0.10)";
-    ctx.lineWidth = 2;
-    line(ctx, size.w * 0.18, size.h * 0.74, size.w * 0.82, size.h * 0.74);
-    line(ctx, size.w * 0.28, size.h * 0.50, size.w * 0.72, size.h * 0.50);
-
-    ctx.fillStyle = "rgba(255,255,255,0.035)";
-    ctx.fillRect(size.w * 0.12, size.h * 0.76, size.w * 0.76, size.h * 0.05);
-  }
-
-  drawMannequin(ctx, size) {
-    const d = this.getDummy(size);
-
-    ctx.save();
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    const flash = this.hitFlash;
-    const wood = `rgba(${150 + flash * 80}, ${118 + flash * 60}, ${78 + flash * 25}, 0.96)`;
-    const edge = `rgba(${235}, ${210}, ${150}, ${0.35 + flash * 0.35})`;
-
-    ctx.strokeStyle = edge;
-    ctx.lineWidth = 16;
-    line(ctx, d.leftArm.x1, d.leftArm.y1, d.leftArm.x2, d.leftArm.y2);
-    line(ctx, d.rightArm.x1, d.rightArm.y1, d.rightArm.x2, d.rightArm.y2);
-    line(ctx, d.leftLeg.x1, d.leftLeg.y1, d.leftLeg.x2, d.leftLeg.y2);
-    line(ctx, d.rightLeg.x1, d.rightLeg.y1, d.rightLeg.x2, d.rightLeg.y2);
-
-    ctx.strokeStyle = wood;
-    ctx.lineWidth = 10;
-    line(ctx, d.leftArm.x1, d.leftArm.y1, d.leftArm.x2, d.leftArm.y2);
-    line(ctx, d.rightArm.x1, d.rightArm.y1, d.rightArm.x2, d.rightArm.y2);
-    line(ctx, d.leftLeg.x1, d.leftLeg.y1, d.leftLeg.x2, d.leftLeg.y2);
-    line(ctx, d.rightLeg.x1, d.rightLeg.y1, d.rightLeg.x2, d.rightLeg.y2);
-
-    roundRect(ctx, d.body.x, d.body.y, d.body.w, d.body.h, 20);
-    ctx.fillStyle = wood;
-    ctx.fill();
-    ctx.strokeStyle = edge;
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    ctx.beginPath();
-    ctx.arc(d.head.x, d.head.y, d.head.r, 0, Math.PI * 2);
-    ctx.fillStyle = wood;
-    ctx.fill();
-    ctx.strokeStyle = edge;
-    ctx.lineWidth = 3;
-    ctx.stroke();
-
-    if (flash > 0) {
-      ctx.beginPath();
-      ctx.arc(d.head.x, d.body.y + d.body.h * 0.5, 80 * flash, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(217,181,111,${0.28 * flash})`;
-      ctx.lineWidth = 4;
-      ctx.stroke();
-    }
-
-    ctx.restore();
-  }
-
-  drawTrail(ctx) {
-    ctx.save();
-    for (const point of this.trail) {
-      ctx.globalAlpha = Math.max(0, point.life) * 0.45;
-      ctx.beginPath();
-      ctx.arc(point.x, point.y, point.hit ? 7 : 4, 0, Math.PI * 2);
-      ctx.fillStyle = point.hit ? "rgba(217,181,111,0.92)" : "rgba(127,215,255,0.72)";
-      ctx.fill();
-    }
-    ctx.restore();
-  }
-
-  drawPlayerHandsAndWeapon(ctx, size) {
-    const weapon = this.getWeapon();
-    const pose = this.computeWeaponPose(size, weapon);
-    const scale = Math.min(size.w, size.h) / 620;
-
-    ctx.save();
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-
-    ctx.strokeStyle = "rgba(56, 64, 82, 0.96)";
-    ctx.lineWidth = 24 * scale;
-    line(ctx, pose.baseX - 44 * scale, pose.baseY + 16 * scale, pose.handX - 20 * scale, pose.handY + 8 * scale);
-    line(ctx, pose.baseX + 44 * scale, pose.baseY + 16 * scale, pose.handX + 20 * scale, pose.handY + 8 * scale);
-
-    ctx.fillStyle = "rgba(204, 171, 122, 0.96)";
-    ctx.beginPath();
-    ctx.arc(pose.handX - 18 * scale, pose.handY + 10 * scale, 18 * scale, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(pose.handX + 18 * scale, pose.handY + 10 * scale, 18 * scale, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (weapon.kind === "hand") {
-      ctx.strokeStyle = "rgba(217,181,111,0.45)";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(pose.tipX, pose.tipY, 26 * scale, 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (weapon.kind === "special") {
-      ctx.strokeStyle = "rgba(210, 220, 230, 0.86)";
-      ctx.lineWidth = weapon.thickness * scale;
-      const links = 8;
-      for (let i = 0; i < links; i++) {
-        const t1 = i / links;
-        const t2 = (i + 0.55) / links;
-        const x1 = lerp(pose.handX, pose.tipX, t1);
-        const y1 = lerp(pose.handY, pose.tipY, t1) + Math.sin(i * 1.9 + performance.now() * 0.006) * 8 * scale;
-        const x2 = lerp(pose.handX, pose.tipX, t2);
-        const y2 = lerp(pose.handY, pose.tipY, t2);
-        line(ctx, x1, y1, x2, y2);
+      if (!this.getLockOn()) {
+        this.player.yaw = Math.atan2(-move.x, -move.z);
       }
-      ctx.fillStyle = "rgba(217,181,111,0.96)";
-      ctx.beginPath();
-      ctx.arc(pose.tipX, pose.tipY, 13 * scale, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      ctx.strokeStyle = weapon.kind === "heavy" ? "rgba(190, 185, 170, 0.96)" : "rgba(215, 225, 232, 0.96)";
-      ctx.lineWidth = weapon.thickness * scale;
-      line(ctx, pose.handX, pose.handY, pose.tipX, pose.tipY);
-
-      ctx.fillStyle = weapon.kind === "heavy" ? "rgba(120, 125, 132, 0.98)" : "rgba(217,181,111,0.95)";
-      ctx.beginPath();
-      ctx.arc(pose.tipX, pose.tipY, (weapon.kind === "heavy" ? 22 : 10) * scale, 0, Math.PI * 2);
-      ctx.fill();
     }
 
-    ctx.restore();
+    this.playerGroup.position.copy(this.player.position);
+    this.playerGroup.rotation.y = this.player.yaw;
   }
 
-  drawHud(ctx, size) {
+  updateFacing(dt) {
+    if (!this.getLockOn()) return;
+
+    const target = this.mannequinGroup.position;
+    const dx = target.x - this.player.position.x;
+    const dz = target.z - this.player.position.z;
+    const desired = Math.atan2(-dx, -dz);
+    this.player.yaw = smoothAngle(this.player.yaw, desired, 1 - Math.exp(-9 * dt));
+  }
+
+  updateAttack(dt) {
+    this.attack.swingX = lerp(this.attack.swingX, this.attack.targetSwingX, 1 - Math.exp(-14 * dt));
+    this.attack.swingY = lerp(this.attack.swingY, this.attack.targetSwingY, 1 - Math.exp(-14 * dt));
+
+    this.attack.targetSwingX *= Math.exp(-5.5 * dt);
+    this.attack.targetSwingY *= Math.exp(-5.5 * dt);
+
+    this.attack.thrust += this.attack.thrustVelocity * dt;
+    this.attack.thrustVelocity -= this.attack.thrust * 42 * dt;
+    this.attack.thrustVelocity *= Math.exp(-12 * dt);
+    this.attack.thrust = clamp(this.attack.thrust, 0, 0.72);
+
     const weapon = this.getWeapon();
+    const heaviness = clamp(weapon.weight, 0.65, 2.2);
+    const weightLag = (heaviness - 1) * 0.18;
+
+    this.weaponPivot.rotation.x = -0.20 + this.attack.swingY * 0.9 - weightLag;
+    this.weaponPivot.rotation.y = this.attack.swingX * 0.85;
+    this.weaponPivot.rotation.z = -0.10 + this.attack.swingX * 0.25;
+    this.weaponPivot.position.z = -0.28 - this.attack.thrust;
+
+    this.attack.flash = Math.max(0, this.attack.flash - dt * 3.2);
+  }
+
+  updateCamera(dt) {
+    const target = new THREE.Vector3().copy(this.player.position);
+    target.y = 1.15;
+
+    let desiredPosition;
+
+    if (this.getLockOn()) {
+      const lockTarget = new THREE.Vector3().copy(this.mannequinGroup.position);
+      lockTarget.y = 1.25;
+
+      const away = new THREE.Vector3().subVectors(this.player.position, lockTarget);
+      away.y = 0;
+      if (away.lengthSq() < 0.001) away.set(0, 0, 1);
+      away.normalize();
+
+      desiredPosition = new THREE.Vector3()
+        .copy(this.player.position)
+        .addScaledVector(away, 4.1)
+        .add(new THREE.Vector3(0, 2.4, 0));
+
+      this.cameraTarget.lerp(lockTarget, 1 - Math.exp(-8 * dt));
+    } else {
+      const back = new THREE.Vector3(Math.sin(this.player.yaw), 0, Math.cos(this.player.yaw));
+      desiredPosition = new THREE.Vector3()
+        .copy(this.player.position)
+        .addScaledVector(back, 4.2)
+        .add(new THREE.Vector3(0, 2.4, 0));
+
+      const forwardLook = new THREE.Vector3()
+        .copy(this.player.position)
+        .addScaledVector(back, -2.5);
+      forwardLook.y = 1.2;
+      this.cameraTarget.lerp(forwardLook, 1 - Math.exp(-7 * dt));
+    }
+
+    this.cameraCurrent.lerp(desiredPosition, 1 - Math.exp(-7 * dt));
+    this.camera.position.copy(this.cameraCurrent);
+    this.camera.lookAt(this.cameraTarget);
+  }
+
+  updateHitReaction(dt) {
+    const tip = this.getWeaponTipWorldPosition();
+    const target = new THREE.Vector3().copy(this.mannequinGroup.position);
+    target.y = 1.25;
+
+    const distance = tip.distanceTo(target);
+    if (distance < 0.55) {
+      this.attack.flash = 1;
+    }
+
+    const scale = 1 + this.attack.flash * 0.035;
+    this.mannequinGroup.scale.set(scale, 1 + this.attack.flash * 0.02, scale);
+
+    this.mannequinGroup.traverse((obj) => {
+      if (obj.isMesh && obj.material && obj.material.emissive) {
+        obj.material.emissiveIntensity = this.attack.flash * 0.45;
+      }
+    });
+  }
+
+  getWeaponTipWorldPosition() {
+    const weapon = this.getWeapon();
+    const localTip = new THREE.Vector3(0, 0, -Math.max(0.42, weapon.length + 0.22));
+    return this.weaponPivot.localToWorld(localTip.clone());
+  }
+
+  onAttackDown(event) {
+    if (event.target.closest?.(".move-stick")) return;
+
+    this.canvas.setPointerCapture?.(event.pointerId);
+    const point = this.getStagePoint(event);
+
+    this.pointerAttack.active = true;
+    this.pointerAttack.startX = point.x;
+    this.pointerAttack.startY = point.y;
+    this.pointerAttack.x = point.x;
+    this.pointerAttack.y = point.y;
+    this.pointerAttack.lastX = point.x;
+    this.pointerAttack.lastY = point.y;
+    this.pointerAttack.startTime = performance.now();
+    this.pointerAttack.points = [{ x: point.x, y: point.y, life: 1 }];
+  }
+
+  onAttackMove(event) {
+    if (!this.pointerAttack.active) return;
+    const point = this.getStagePoint(event);
+
+    const width = this.stage.clientWidth;
+    const height = this.stage.clientHeight;
+    const dx = (point.x - this.pointerAttack.lastX) / Math.max(1, width);
+    const dy = (point.y - this.pointerAttack.lastY) / Math.max(1, height);
+
+    this.attack.targetSwingX = clamp(this.attack.targetSwingX + dx * 9.5, -1.25, 1.25);
+    this.attack.targetSwingY = clamp(this.attack.targetSwingY + dy * 7.5, -1.05, 1.05);
+
+    this.pointerAttack.lastX = this.pointerAttack.x;
+    this.pointerAttack.lastY = this.pointerAttack.y;
+    this.pointerAttack.x = point.x;
+    this.pointerAttack.y = point.y;
+    this.pointerAttack.points.push({ x: point.x, y: point.y, life: 1 });
+  }
+
+  onAttackUp(event) {
+    if (!this.pointerAttack.active) return;
+
+    const point = this.getStagePoint(event);
+    const totalDx = point.x - this.pointerAttack.startX;
+    const totalDy = point.y - this.pointerAttack.startY;
+    const distance = Math.sqrt(totalDx * totalDx + totalDy * totalDy);
+    const duration = performance.now() - this.pointerAttack.startTime;
+
+    if (duration < 230 && distance < 18) {
+      this.attack.thrustVelocity = 8.5;
+    }
+
+    this.pointerAttack.active = false;
+  }
+
+  onStickDown(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.joystick.active = true;
+    this.joystick.pointerId = event.pointerId;
+    this.updateStick(event);
+  }
+
+  onStickMove(event) {
+    if (!this.joystick.active || event.pointerId !== this.joystick.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.updateStick(event);
+  }
+
+  onStickUp(event) {
+    if (!this.joystick.active) return;
+    if (event.pointerId !== undefined && this.joystick.pointerId !== event.pointerId) return;
+
+    this.joystick.active = false;
+    this.joystick.pointerId = null;
+    this.joystick.x = 0;
+    this.joystick.y = 0;
+    this.updateStickKnob(0, 0);
+  }
+
+  updateStick(event) {
+    const stick = document.getElementById("moveStick");
+    if (!stick) return;
+    const rect = stick.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const max = rect.width * 0.34;
+    const dx = clamp(event.clientX - centerX, -max, max);
+    const dy = clamp(event.clientY - centerY, -max, max);
+
+    this.joystick.x = dx / max;
+    this.joystick.y = dy / max;
+    this.updateStickKnob(dx, dy);
+  }
+
+  updateStickKnob(dx, dy) {
+    const knob = document.getElementById("moveStickKnob");
+    if (!knob) return;
+    knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  }
+
+  getStagePoint(event) {
+    const rect = this.stage.getBoundingClientRect();
+    return {
+      x: clamp(event.clientX - rect.left, 0, rect.width),
+      y: clamp(event.clientY - rect.top, 0, rect.height)
+    };
+  }
+
+  drawAttackTrail() {
+    const width = this.stage.clientWidth;
+    const height = this.stage.clientHeight;
+    const ctx = this.trailCtx;
+
+    ctx.clearRect(0, 0, width, height);
+
+    for (const point of this.pointerAttack.points) {
+      point.life -= 0.025;
+    }
+    this.pointerAttack.points = this.pointerAttack.points.filter((point) => point.life > 0);
+
+    if (this.pointerAttack.points.length < 2) return;
+
     ctx.save();
-    ctx.fillStyle = "rgba(0,0,0,0.36)";
-    roundRect(ctx, 16, 16, Math.min(size.w - 32, 380), 86, 18);
-    ctx.fill();
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
 
-    ctx.fillStyle = "#f4f7fb";
-    ctx.font = "700 16px system-ui, sans-serif";
-    ctx.fillText(`選択中：${weapon.name}`, 32, 48);
-
-    ctx.fillStyle = "rgba(244,247,251,0.70)";
-    ctx.font = "13px system-ui, sans-serif";
-    ctx.fillText(`カテゴリ：${weapon.category}`, 32, 73);
-    ctx.fillText("ここでは評価・点数・おすすめ表示は出ない", 32, 94);
+    for (let i = 1; i < this.pointerAttack.points.length; i += 1) {
+      const a = this.pointerAttack.points[i - 1];
+      const b = this.pointerAttack.points[i];
+      const alpha = Math.max(0, Math.min(a.life, b.life));
+      ctx.strokeStyle = `rgba(217, 181, 111, ${alpha * 0.8})`;
+      ctx.lineWidth = 4 + alpha * 4;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
 
     ctx.restore();
   }
@@ -823,49 +1245,11 @@ function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
-function line(ctx, x1, y1, x2, y2) {
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.stroke();
-}
-
-function pointInCircle(px, py, cx, cy, r) {
-  const dx = px - cx;
-  const dy = py - cy;
-  return dx * dx + dy * dy <= r * r;
-}
-
-function pointInRoundedRect(px, py, x, y, w, h) {
-  return px >= x && px <= x + w && py >= y && py <= y + h;
-}
-
-function pointNearLine(px, py, x1, y1, x2, y2, radius) {
-  const lengthSq = (x2 - x1) ** 2 + (y2 - y1) ** 2;
-  if (lengthSq === 0) return false;
-
-  const t = clamp(((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / lengthSq, 0, 1);
-  const cx = x1 + t * (x2 - x1);
-  const cy = y1 + t * (y2 - y1);
-  const dx = px - cx;
-  const dy = py - cy;
-
-  return dx * dx + dy * dy <= radius * radius;
-}
-
-function roundRect(ctx, x, y, w, h, r) {
-  const radius = Math.min(r, w / 2, h / 2);
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + w - radius, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
-  ctx.lineTo(x + w, y + h - radius);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
-  ctx.lineTo(x + radius, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
+function smoothAngle(current, target, t) {
+  let diff = target - current;
+  while (diff > Math.PI) diff -= Math.PI * 2;
+  while (diff < -Math.PI) diff += Math.PI * 2;
+  return current + diff * t;
 }
 
 render();
