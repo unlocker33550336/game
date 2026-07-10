@@ -1,0 +1,17 @@
+{
+  "name": "battle-origin-site",
+  "version": "0.1.0",
+  "description": "A standalone first-person 2D battle game prototype focused on the confirmed opening flow: initial environment selection, 武人 start, trial lobby, private weapon test room, and weapon-category guidance board.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
