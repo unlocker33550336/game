@@ -318,7 +318,7 @@ function renderControlGuide() {
           </div>
           <div>
             <h3>移動</h3>
-            <p>WASD / 方向キーで移動。スマホでは左下の操作パッドで動く。</p>
+            <p>WASD / 方向キーで移動。Shiftでゆっくり、Spaceで短い踏み込み。</p>
           </div>
         </article>
 
@@ -330,19 +330,19 @@ function renderControlGuide() {
             </svg>
           </div>
           <div>
-            <h3>軌道攻撃</h3>
-            <p>マウスドラッグ / 画面をなぞる操作で、武器や腕の軌道を描く。</p>
+            <h3>手の操作</h3>
+            <p>左ドラッグで右手、右ドラッグで左手を動かす。Qは左手、Eは右手で掴む。</p>
           </div>
         </article>
 
         <article class="guide-card">
           <div class="guide-illust tap-illust">
-            <div class="tap-button">TAP</div>
+            <div class="tap-button">Q E R</div>
             <div class="tap-arrow">↓</div>
           </div>
           <div>
-            <h3>突き・殴り</h3>
-            <p>クリック / タップで、正面へ短く出す攻撃を試す。</p>
+            <h3>掴む・両手持ち</h3>
+            <p>Q：左手で掴む/離す。E：右手で掴む/離す。R：両手持ち切り替え。</p>
           </div>
         </article>
 
@@ -353,7 +353,7 @@ function renderControlGuide() {
           </div>
           <div>
             <h3>ロックオン</h3>
-            <p>ボタンでON/OFF切り替え。ONの間はマネキンを自動追尾する。</p>
+            <p>ボタンまたはLでON/OFF切り替え。ONの間はマネキンを自動追尾する。</p>
           </div>
         </article>
       </div>
@@ -408,7 +408,7 @@ function renderTrialRoom() {
           <aside class="side-panel">
             <h3>個室</h3>
             <p class="muted">
-              3Dの個室。移動、ロックオン切り替え、マウス・タッチによる攻撃軌道を試せる。
+              3Dの個室。移動、ロックオン切り替え、左右の手、掴み、両手持ち、IK歩行を試せる。
               評価表示は出ない。
             </p>
 
@@ -423,10 +423,12 @@ function renderTrialRoom() {
 
             <div class="stat-box">
               <div>移動：WASD / 方向キー / 左下パッド</div>
-              <div>攻撃：マウスドラッグ / 画面をなぞる</div>
-              <div>突き・殴り：クリック / タップ</div>
-              <div>視点：ロックオン中は自動追尾</div>
+              <div>ゆっくり：Shift　踏み込み：Space</div>
+              <div>右手：左クリック / 左ドラッグ / E</div>
+              <div>左手：右クリック / 右ドラッグ / Q</div>
+              <div>両手持ち：R　ロックオン：L</div>
               <div>物理：床・壁・マネキンとの衝突</div>
+              <div>IK：腕・脚・歩行・掴み姿勢</div>
               <div>未実装：ダメージ、成長、流派効果、対人戦</div>
             </div>
 
@@ -444,7 +446,7 @@ function renderTrialRoom() {
               <button class="lock-btn ${state.lockOn ? "active" : ""}" data-action="toggle-lock">
                 LOCK ${state.lockOn ? "ON" : "OFF"}
               </button>
-              <div class="overlay-hint">マウス / タッチで軌道を描く</div>
+              <div class="overlay-hint">左ドラッグ：右手 / 右ドラッグ：左手 / Q E R</div>
             </div>
 
             <div class="move-stick" id="moveStick" aria-label="移動パッド">
@@ -452,7 +454,7 @@ function renderTrialRoom() {
               <div class="move-stick-knob" id="moveStickKnob"></div>
             </div>
 
-            <div class="attack-zone-hint">攻撃エリア</div>
+            <div class="attack-zone-hint">手操作エリア</div>
           </section>
         </div>
       </section>
@@ -566,15 +568,7 @@ document.addEventListener("click", (event) => {
 
   if (action === "toggle-lock") {
     state.lockOn = !state.lockOn;
-
-    if (state.screen === SCREENS.TRIAL_ROOM) {
-      const lockButton = document.querySelector(".lock-btn");
-      if (lockButton) {
-        lockButton.textContent = `LOCK ${state.lockOn ? "ON" : "OFF"}`;
-        lockButton.classList.toggle("active", state.lockOn);
-      }
-    }
-
+    updateLockButton();
     return;
   }
 
@@ -586,6 +580,15 @@ document.addEventListener("click", (event) => {
     }
   }
 });
+
+function updateLockButton() {
+  const lockButton = document.querySelector(".lock-btn");
+
+  if (lockButton) {
+    lockButton.textContent = `LOCK ${state.lockOn ? "ON" : "OFF"}`;
+    lockButton.classList.toggle("active", state.lockOn);
+  }
+}
 
 class TrainingScene3D {
   constructor({ canvas, trailCanvas, stage, getWeapon, getLockOn }) {
@@ -611,8 +614,16 @@ class TrainingScene3D {
     this.player = {
       position: new THREE.Vector3(0, 0, 4.1),
       yaw: Math.PI,
-      speed: 4.0
+      speed: 4.0,
+      slowSpeed: 1.75,
+      dashCooldown: 0
     };
+
+    this.velocity = new THREE.Vector3();
+    this.lastVisualMove = new THREE.Vector3(0, 0, -1);
+    this.moveAmount = 0;
+    this.walkPhase = 0;
+    this.stepBurst = 0;
 
     this.keys = new Set();
 
@@ -625,6 +636,7 @@ class TrainingScene3D {
 
     this.pointerAttack = {
       active: false,
+      hand: "right",
       startX: 0,
       startY: 0,
       x: 0,
@@ -635,34 +647,31 @@ class TrainingScene3D {
       points: []
     };
 
-    this.attack = {
-      swingX: 0,
-      swingY: 0,
-      targetSwingX: 0,
-      targetSwingY: 0,
-      thrust: 0,
-      thrustVelocity: 0,
-      flash: 0
+    this.hands = {
+      left: createHandState("left"),
+      right: createHandState("right")
     };
 
-    this.weaponMeshGroup = null;
-    this.weaponPivot = null;
+    this.grabbables = [];
+    this.selectedHandObject = null;
+    this.lastWeaponId = null;
+
+    this.rig = null;
     this.playerGroup = null;
     this.mannequinGroup = null;
 
     this.cameraTarget = new THREE.Vector3(0, 1.15, 0);
     this.cameraCurrent = new THREE.Vector3(0, 4.8, 9.2);
 
-    this.lastWeaponId = null;
-
     this.trailCtx = this.trailCanvas.getContext("2d");
 
     this.boundResize = () => this.resize();
-    this.boundKeyDown = (event) => this.keys.add(event.key.toLowerCase());
-    this.boundKeyUp = (event) => this.keys.delete(event.key.toLowerCase());
+    this.boundKeyDown = (event) => this.onKeyDown(event);
+    this.boundKeyUp = (event) => this.onKeyUp(event);
     this.boundAttackDown = (event) => this.onAttackDown(event);
     this.boundAttackMove = (event) => this.onAttackMove(event);
     this.boundAttackUp = (event) => this.onAttackUp(event);
+    this.boundContextMenu = (event) => event.preventDefault();
     this.boundStickDown = (event) => this.onStickDown(event);
     this.boundStickMove = (event) => this.onStickMove(event);
     this.boundStickUp = (event) => this.onStickUp(event);
@@ -727,6 +736,8 @@ class TrainingScene3D {
     this.canvas.addEventListener("pointerdown", this.boundAttackDown);
     this.canvas.addEventListener("pointermove", this.boundAttackMove);
     window.addEventListener("pointerup", this.boundAttackUp);
+    this.canvas.addEventListener("contextmenu", this.boundContextMenu);
+    this.stage.addEventListener("contextmenu", this.boundContextMenu);
 
     const stick = document.getElementById("moveStick");
     if (stick) {
@@ -745,6 +756,8 @@ class TrainingScene3D {
     this.canvas.removeEventListener("pointerdown", this.boundAttackDown);
     this.canvas.removeEventListener("pointermove", this.boundAttackMove);
     window.removeEventListener("pointerup", this.boundAttackUp);
+    this.canvas.removeEventListener("contextmenu", this.boundContextMenu);
+    this.stage.removeEventListener("contextmenu", this.boundContextMenu);
 
     const stick = document.getElementById("moveStick");
     if (stick) {
@@ -768,32 +781,35 @@ class TrainingScene3D {
     const wallHeight = 3.2;
     const wallThickness = 0.16;
 
-    const backWallCollider = RAPIER.ColliderDesc
-      .cuboid(ROOM_HALF_SIZE, wallHeight / 2, wallThickness / 2)
-      .setTranslation(0, wallHeight / 2, -ROOM_HALF_SIZE);
+    this.physicsWorld.createCollider(
+      RAPIER.ColliderDesc
+        .cuboid(ROOM_HALF_SIZE, wallHeight / 2, wallThickness / 2)
+        .setTranslation(0, wallHeight / 2, -ROOM_HALF_SIZE)
+    );
 
-    const frontWallCollider = RAPIER.ColliderDesc
-      .cuboid(ROOM_HALF_SIZE, wallHeight / 2, wallThickness / 2)
-      .setTranslation(0, wallHeight / 2, ROOM_HALF_SIZE);
+    this.physicsWorld.createCollider(
+      RAPIER.ColliderDesc
+        .cuboid(ROOM_HALF_SIZE, wallHeight / 2, wallThickness / 2)
+        .setTranslation(0, wallHeight / 2, ROOM_HALF_SIZE)
+    );
 
-    const leftWallCollider = RAPIER.ColliderDesc
-      .cuboid(wallThickness / 2, wallHeight / 2, ROOM_HALF_SIZE)
-      .setTranslation(-ROOM_HALF_SIZE, wallHeight / 2, 0);
+    this.physicsWorld.createCollider(
+      RAPIER.ColliderDesc
+        .cuboid(wallThickness / 2, wallHeight / 2, ROOM_HALF_SIZE)
+        .setTranslation(-ROOM_HALF_SIZE, wallHeight / 2, 0)
+    );
 
-    const rightWallCollider = RAPIER.ColliderDesc
-      .cuboid(wallThickness / 2, wallHeight / 2, ROOM_HALF_SIZE)
-      .setTranslation(ROOM_HALF_SIZE, wallHeight / 2, 0);
+    this.physicsWorld.createCollider(
+      RAPIER.ColliderDesc
+        .cuboid(wallThickness / 2, wallHeight / 2, ROOM_HALF_SIZE)
+        .setTranslation(ROOM_HALF_SIZE, wallHeight / 2, 0)
+    );
 
-    this.physicsWorld.createCollider(backWallCollider);
-    this.physicsWorld.createCollider(frontWallCollider);
-    this.physicsWorld.createCollider(leftWallCollider);
-    this.physicsWorld.createCollider(rightWallCollider);
-
-    const mannequinCollider = RAPIER.ColliderDesc
-      .capsule(0.46, 0.28)
-      .setTranslation(0, 0.70, -3.2);
-
-    this.physicsWorld.createCollider(mannequinCollider);
+    this.physicsWorld.createCollider(
+      RAPIER.ColliderDesc
+        .capsule(0.46, 0.28)
+        .setTranslation(0, 0.70, -3.2)
+    );
 
     const playerBodyDesc = RAPIER.RigidBodyDesc
       .kinematicPositionBased()
@@ -801,10 +817,10 @@ class TrainingScene3D {
 
     this.playerBody = this.physicsWorld.createRigidBody(playerBodyDesc);
 
-    const playerColliderDesc = RAPIER.ColliderDesc
-      .capsule(0.46, 0.24);
-
-    this.playerCollider = this.physicsWorld.createCollider(playerColliderDesc, this.playerBody);
+    this.playerCollider = this.physicsWorld.createCollider(
+      RAPIER.ColliderDesc.capsule(0.46, 0.24),
+      this.playerBody
+    );
 
     this.characterController = this.physicsWorld.createCharacterController(0.035);
     this.characterController.setUp({ x: 0, y: 1, z: 0 });
@@ -836,7 +852,7 @@ class TrainingScene3D {
     this.addGridLines();
     this.addWeaponRack();
 
-    this.playerGroup = this.createPlayer();
+    this.playerGroup = this.createPlayerRig();
     this.scene.add(this.playerGroup);
 
     this.mannequinGroup = this.createMannequin();
@@ -844,7 +860,9 @@ class TrainingScene3D {
     this.mannequinGroup.scale.setScalar(MANNEQUIN_VISUAL_SCALE);
     this.scene.add(this.mannequinGroup);
 
+    this.createWorldPracticeObjects();
     this.createWeaponForSelected();
+    this.updateRig(0.016);
   }
 
   addRoomWalls() {
@@ -924,201 +942,122 @@ class TrainingScene3D {
     this.scene.add(rack);
   }
 
-  createPlayer() {
+  createPlayerRig() {
     const group = new THREE.Group();
+    group.scale.setScalar(PLAYER_VISUAL_SCALE);
 
-    const cloth = new THREE.MeshStandardMaterial({
-      color: 0x3a465d,
-      roughness: 0.7
-    });
+    const cloth = new THREE.MeshStandardMaterial({ color: 0x3a465d, roughness: 0.7 });
+    const darkCloth = new THREE.MeshStandardMaterial({ color: 0x263044, roughness: 0.74 });
+    const skin = new THREE.MeshStandardMaterial({ color: 0xd8ad78, roughness: 0.72 });
+    const jointMat = new THREE.MeshStandardMaterial({ color: 0x6f7d96, roughness: 0.66 });
+    const accent = new THREE.MeshStandardMaterial({ color: 0xd9b56f, roughness: 0.55 });
 
-    const darkCloth = new THREE.MeshStandardMaterial({
-      color: 0x263044,
-      roughness: 0.74
-    });
+    const rig = {
+      group,
+      materials: { cloth, darkCloth, skin, jointMat, accent },
+      limbs: {},
+      joints: {},
+      boxes: {},
+      points: {
+        leftHand: new THREE.Vector3(),
+        rightHand: new THREE.Vector3(),
+        leftFoot: new THREE.Vector3(),
+        rightFoot: new THREE.Vector3()
+      }
+    };
 
-    const skin = new THREE.MeshStandardMaterial({
-      color: 0xd8ad78,
-      roughness: 0.72
-    });
+    rig.boxes.pelvis = createBoxPart(new THREE.Vector3(0.48, 0.20, 0.30), new THREE.Vector3(0, 0.78, 0), darkCloth);
+    rig.boxes.leftHand = createBoxPart(new THREE.Vector3(0.11, 0.07, 0.16), new THREE.Vector3(-0.43, 0.88, -0.38), skin);
+    rig.boxes.rightHand = createBoxPart(new THREE.Vector3(0.11, 0.07, 0.16), new THREE.Vector3(0.43, 0.88, -0.38), skin);
+    rig.boxes.leftFoot = createBoxPart(new THREE.Vector3(0.16, 0.07, 0.28), new THREE.Vector3(-0.21, 0.055, -0.11), darkCloth);
+    rig.boxes.rightFoot = createBoxPart(new THREE.Vector3(0.16, 0.07, 0.28), new THREE.Vector3(0.21, 0.055, -0.11), darkCloth);
+    rig.boxes.leftToe = createBoxPart(new THREE.Vector3(0.15, 0.045, 0.10), new THREE.Vector3(-0.21, 0.045, -0.28), darkCloth);
+    rig.boxes.rightToe = createBoxPart(new THREE.Vector3(0.15, 0.045, 0.10), new THREE.Vector3(0.21, 0.045, -0.28), darkCloth);
+    rig.boxes.facingMark = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.24), accent);
+    rig.boxes.facingMark.position.set(0, 1.42, -0.36);
+    rig.boxes.facingMark.castShadow = true;
 
-    const jointMat = new THREE.MeshStandardMaterial({
-      color: 0x6f7d96,
-      roughness: 0.66
-    });
+    rig.limbs.abdomen = new DynamicLimb(0.25, cloth, 18);
+    rig.limbs.lowerChest = new DynamicLimb(0.30, cloth, 18);
+    rig.limbs.upperChest = new DynamicLimb(0.34, cloth, 18);
+    rig.limbs.neck = new DynamicLimb(0.095, skin, 14);
+    rig.limbs.shoulderLine = new DynamicLimb(0.055, darkCloth, 12);
 
-    const accent = new THREE.MeshStandardMaterial({
-      color: 0xd9b56f,
-      roughness: 0.55
-    });
+    rig.limbs.leftUpperArm = new DynamicLimb(0.075, cloth, 12);
+    rig.limbs.leftForearm = new DynamicLimb(0.060, cloth, 12);
+    rig.limbs.rightUpperArm = new DynamicLimb(0.075, cloth, 12);
+    rig.limbs.rightForearm = new DynamicLimb(0.060, cloth, 12);
 
-    const pelvis = createBoxPart(new THREE.Vector3(0.48, 0.20, 0.30), new THREE.Vector3(0, 0.78, 0), darkCloth);
-    const abdomen = createLimb(new THREE.Vector3(0, 0.86, 0), new THREE.Vector3(0, 1.10, -0.01), 0.25, cloth, 18);
-    const lowerChest = createLimb(new THREE.Vector3(0, 1.09, -0.01), new THREE.Vector3(0, 1.31, -0.03), 0.30, cloth, 18);
-    const upperChest = createLimb(new THREE.Vector3(0, 1.30, -0.03), new THREE.Vector3(0, 1.49, -0.04), 0.34, cloth, 18);
+    rig.limbs.leftThigh = new DynamicLimb(0.095, darkCloth, 14);
+    rig.limbs.leftShin = new DynamicLimb(0.070, cloth, 12);
+    rig.limbs.rightThigh = new DynamicLimb(0.095, darkCloth, 14);
+    rig.limbs.rightShin = new DynamicLimb(0.070, cloth, 12);
 
-    const neck = createLimb(new THREE.Vector3(0, 1.52, -0.02), new THREE.Vector3(0, 1.63, -0.02), 0.095, skin, 14);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 22, 22), skin);
-    head.position.set(0, 1.82, -0.02);
-    head.castShadow = true;
+    for (const [name, limb] of Object.entries(rig.limbs)) {
+      limb.mesh.name = name;
+      group.add(limb.mesh);
+    }
 
-    const shoulderLine = createLimb(
-      new THREE.Vector3(-0.42, 1.43, -0.03),
-      new THREE.Vector3(0.42, 1.43, -0.03),
-      0.055,
-      darkCloth,
-      12
-    );
+    const jointNames = [
+      "head",
+      "leftShoulder",
+      "rightShoulder",
+      "leftElbow",
+      "rightElbow",
+      "leftWrist",
+      "rightWrist",
+      "leftHip",
+      "rightHip",
+      "leftKnee",
+      "rightKnee",
+      "leftAnkle",
+      "rightAnkle"
+    ];
 
-    const leftShoulder = createJoint(new THREE.Vector3(-0.46, 1.41, -0.04), 0.095, jointMat);
-    const rightShoulder = createJoint(new THREE.Vector3(0.46, 1.41, -0.04), 0.095, jointMat);
+    for (const name of jointNames) {
+      const radius =
+        name === "head" ? 0.22 :
+        name.includes("Shoulder") ? 0.095 :
+        name.includes("Elbow") ? 0.075 :
+        name.includes("Wrist") ? 0.045 :
+        name.includes("Hip") ? 0.085 :
+        name.includes("Knee") ? 0.075 :
+        name.includes("Ankle") ? 0.055 :
+        0.06;
 
-    const leftUpperArm = createLimb(
-      new THREE.Vector3(-0.48, 1.36, -0.04),
-      new THREE.Vector3(-0.58, 1.12, -0.10),
-      0.075,
-      cloth,
-      12
-    );
-    const rightUpperArm = createLimb(
-      new THREE.Vector3(0.48, 1.36, -0.04),
-      new THREE.Vector3(0.58, 1.12, -0.10),
-      0.075,
-      cloth,
-      12
-    );
-
-    const leftElbow = createJoint(new THREE.Vector3(-0.58, 1.12, -0.10), 0.075, jointMat);
-    const rightElbow = createJoint(new THREE.Vector3(0.58, 1.12, -0.10), 0.075, jointMat);
-
-    const leftForearm = createLimb(
-      new THREE.Vector3(-0.58, 1.10, -0.10),
-      new THREE.Vector3(-0.45, 0.92, -0.30),
-      0.060,
-      cloth,
-      12
-    );
-    const rightForearm = createLimb(
-      new THREE.Vector3(0.58, 1.10, -0.10),
-      new THREE.Vector3(0.45, 0.92, -0.30),
-      0.060,
-      cloth,
-      12
-    );
-
-    const leftWrist = createJoint(new THREE.Vector3(-0.45, 0.92, -0.30), 0.045, jointMat);
-    const rightWrist = createJoint(new THREE.Vector3(0.45, 0.92, -0.30), 0.045, jointMat);
-
-    const leftHand = createBoxPart(new THREE.Vector3(0.11, 0.07, 0.16), new THREE.Vector3(-0.43, 0.88, -0.38), skin);
-    const rightHand = createBoxPart(new THREE.Vector3(0.11, 0.07, 0.16), new THREE.Vector3(0.43, 0.88, -0.38), skin);
+      const material = name === "head" ? skin : jointMat;
+      rig.joints[name] = createJoint(new THREE.Vector3(), radius, material);
+      group.add(rig.joints[name]);
+    }
 
     const fingerParts = [];
+
     for (let side of [-1, 1]) {
       for (let i = -1; i <= 1; i += 1) {
-        fingerParts.push(
-          createLimb(
-            new THREE.Vector3(side * (0.43 + i * 0.025), 0.86, -0.43),
-            new THREE.Vector3(side * (0.43 + i * 0.030), 0.84, -0.51),
-            0.012,
-            skin,
-            8
-          )
-        );
+        const finger = new DynamicLimb(0.012, skin, 8);
+        fingerParts.push({
+          side,
+          index: i,
+          limb: finger
+        });
+        group.add(finger.mesh);
       }
     }
 
-    const leftHip = createJoint(new THREE.Vector3(-0.18, 0.72, 0.01), 0.085, jointMat);
-    const rightHip = createJoint(new THREE.Vector3(0.18, 0.72, 0.01), 0.085, jointMat);
-
-    const leftThigh = createLimb(
-      new THREE.Vector3(-0.18, 0.68, 0.01),
-      new THREE.Vector3(-0.20, 0.40, -0.01),
-      0.095,
-      darkCloth,
-      14
-    );
-    const rightThigh = createLimb(
-      new THREE.Vector3(0.18, 0.68, 0.01),
-      new THREE.Vector3(0.20, 0.40, -0.01),
-      0.095,
-      darkCloth,
-      14
-    );
-
-    const leftKnee = createJoint(new THREE.Vector3(-0.20, 0.39, -0.01), 0.075, jointMat);
-    const rightKnee = createJoint(new THREE.Vector3(0.20, 0.39, -0.01), 0.075, jointMat);
-
-    const leftShin = createLimb(
-      new THREE.Vector3(-0.20, 0.35, -0.01),
-      new THREE.Vector3(-0.21, 0.14, -0.02),
-      0.070,
-      cloth,
-      12
-    );
-    const rightShin = createLimb(
-      new THREE.Vector3(0.20, 0.35, -0.01),
-      new THREE.Vector3(0.21, 0.14, -0.02),
-      0.070,
-      cloth,
-      12
-    );
-
-    const leftAnkle = createJoint(new THREE.Vector3(-0.21, 0.12, -0.02), 0.055, jointMat);
-    const rightAnkle = createJoint(new THREE.Vector3(0.21, 0.12, -0.02), 0.055, jointMat);
-
-    const leftFoot = createBoxPart(new THREE.Vector3(0.16, 0.07, 0.28), new THREE.Vector3(-0.21, 0.055, -0.11), darkCloth);
-    const rightFoot = createBoxPart(new THREE.Vector3(0.16, 0.07, 0.28), new THREE.Vector3(0.21, 0.055, -0.11), darkCloth);
-
-    const leftToe = createBoxPart(new THREE.Vector3(0.15, 0.045, 0.10), new THREE.Vector3(-0.21, 0.045, -0.28), darkCloth);
-    const rightToe = createBoxPart(new THREE.Vector3(0.15, 0.045, 0.10), new THREE.Vector3(0.21, 0.045, -0.28), darkCloth);
-
-    const facingMark = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.24), accent);
-    facingMark.position.set(0, 1.42, -0.36);
-    facingMark.castShadow = true;
-
-    this.weaponPivot = new THREE.Group();
-    this.weaponPivot.position.set(0.43, 0.90, -0.42);
+    rig.fingers = fingerParts;
 
     group.add(
-      pelvis,
-      abdomen,
-      lowerChest,
-      upperChest,
-      neck,
-      head,
-      shoulderLine,
-      leftShoulder,
-      rightShoulder,
-      leftUpperArm,
-      rightUpperArm,
-      leftElbow,
-      rightElbow,
-      leftForearm,
-      rightForearm,
-      leftWrist,
-      rightWrist,
-      leftHand,
-      rightHand,
-      ...fingerParts,
-      leftHip,
-      rightHip,
-      leftThigh,
-      rightThigh,
-      leftKnee,
-      rightKnee,
-      leftShin,
-      rightShin,
-      leftAnkle,
-      rightAnkle,
-      leftFoot,
-      rightFoot,
-      leftToe,
-      rightToe,
-      facingMark,
-      this.weaponPivot
+      rig.boxes.pelvis,
+      rig.boxes.leftHand,
+      rig.boxes.rightHand,
+      rig.boxes.leftFoot,
+      rig.boxes.rightFoot,
+      rig.boxes.leftToe,
+      rig.boxes.rightToe,
+      rig.boxes.facingMark
     );
 
-    group.scale.setScalar(PLAYER_VISUAL_SCALE);
+    this.rig = rig;
 
     return group;
   }
@@ -1152,8 +1091,8 @@ class TrainingScene3D {
     const abdomen = createLimb(new THREE.Vector3(0, 0.80, 0), new THREE.Vector3(0, 1.02, -0.01), 0.22, wood, 18);
     const lowerTorso = createLimb(new THREE.Vector3(0, 1.00, -0.01), new THREE.Vector3(0, 1.20, -0.02), 0.27, wood, 18);
     const upperTorso = createLimb(new THREE.Vector3(0, 1.18, -0.02), new THREE.Vector3(0, 1.38, -0.03), 0.31, wood, 18);
-
     const neck = createLimb(new THREE.Vector3(0, 1.42, -0.02), new THREE.Vector3(0, 1.53, -0.02), 0.08, jointWood, 12);
+
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 20, 20), wood);
     head.position.y = 1.71;
     head.castShadow = true;
@@ -1176,6 +1115,7 @@ class TrainingScene3D {
       wood,
       12
     );
+
     const rightUpperArm = createLimb(
       new THREE.Vector3(0.47, 1.28, -0.02),
       new THREE.Vector3(0.62, 1.06, 0.00),
@@ -1194,6 +1134,7 @@ class TrainingScene3D {
       wood,
       12
     );
+
     const rightForearm = createLimb(
       new THREE.Vector3(0.62, 1.04, 0.00),
       new THREE.Vector3(0.52, 0.86, -0.15),
@@ -1211,38 +1152,14 @@ class TrainingScene3D {
     const leftHip = createJoint(new THREE.Vector3(-0.18, 0.65, 0), 0.07, jointWood);
     const rightHip = createJoint(new THREE.Vector3(0.18, 0.65, 0), 0.07, jointWood);
 
-    const leftThigh = createLimb(
-      new THREE.Vector3(-0.18, 0.62, 0),
-      new THREE.Vector3(-0.20, 0.38, -0.01),
-      0.075,
-      wood,
-      12
-    );
-    const rightThigh = createLimb(
-      new THREE.Vector3(0.18, 0.62, 0),
-      new THREE.Vector3(0.20, 0.38, -0.01),
-      0.075,
-      wood,
-      12
-    );
+    const leftThigh = createLimb(new THREE.Vector3(-0.18, 0.62, 0), new THREE.Vector3(-0.20, 0.38, -0.01), 0.075, wood, 12);
+    const rightThigh = createLimb(new THREE.Vector3(0.18, 0.62, 0), new THREE.Vector3(0.20, 0.38, -0.01), 0.075, wood, 12);
 
     const leftKnee = createJoint(new THREE.Vector3(-0.20, 0.37, -0.01), 0.058, jointWood);
     const rightKnee = createJoint(new THREE.Vector3(0.20, 0.37, -0.01), 0.058, jointWood);
 
-    const leftShin = createLimb(
-      new THREE.Vector3(-0.20, 0.34, -0.01),
-      new THREE.Vector3(-0.21, 0.16, -0.02),
-      0.055,
-      wood,
-      12
-    );
-    const rightShin = createLimb(
-      new THREE.Vector3(0.20, 0.34, -0.01),
-      new THREE.Vector3(0.21, 0.16, -0.02),
-      0.055,
-      wood,
-      12
-    );
+    const leftShin = createLimb(new THREE.Vector3(-0.20, 0.34, -0.01), new THREE.Vector3(-0.21, 0.16, -0.02), 0.055, wood, 12);
+    const rightShin = createLimb(new THREE.Vector3(0.20, 0.34, -0.01), new THREE.Vector3(0.21, 0.16, -0.02), 0.055, wood, 12);
 
     const leftAnkle = createJoint(new THREE.Vector3(-0.21, 0.14, -0.02), 0.045, jointWood);
     const rightAnkle = createJoint(new THREE.Vector3(0.21, 0.14, -0.02), 0.045, jointWood);
@@ -1293,19 +1210,105 @@ class TrainingScene3D {
     return group;
   }
 
+  createWorldPracticeObjects() {
+    const placements = [
+      { weaponId: "practiceKnife", position: new THREE.Vector3(-6.35, 0.95, -5.65), rotationY: Math.PI * 0.15 },
+      { weaponId: "practiceBlade", position: new THREE.Vector3(-6.90, 1.10, -5.65), rotationY: Math.PI * 0.05 },
+      { weaponId: "practiceStaff", position: new THREE.Vector3(-7.45, 1.20, -5.65), rotationY: -Math.PI * 0.05 },
+      { weaponId: "weightedTrainer", position: new THREE.Vector3(-5.95, 0.32, -4.65), rotationY: Math.PI * 0.35 },
+      { weaponId: "chainTrainer", position: new THREE.Vector3(-7.45, 0.42, -4.55), rotationY: -Math.PI * 0.25 }
+    ];
+
+    for (const placement of placements) {
+      const weapon = weapons.find((item) => item.id === placement.weaponId);
+      if (!weapon) continue;
+
+      const object = this.createGrabbableFromWeapon(weapon, placement.position, false);
+      object.mesh.rotation.y = placement.rotationY;
+      this.scene.add(object.mesh);
+      this.grabbables.push(object);
+    }
+
+    const blockMat = new THREE.MeshStandardMaterial({
+      color: 0x586273,
+      roughness: 0.82,
+      metalness: 0.04
+    });
+
+    const block = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.32, 0.44), blockMat);
+    block.position.set(2.4, 0.18, -4.8);
+    block.castShadow = true;
+    block.receiveShadow = true;
+
+    const object = {
+      id: `prop_block_${cryptoRandomId()}`,
+      name: "練習用ブロック",
+      type: "prop",
+      mesh: block,
+      weight: 1.2,
+      length: 0.44,
+      holders: new Set(),
+      primaryHand: null,
+      selectedObject: false
+    };
+
+    this.scene.add(block);
+    this.grabbables.push(object);
+  }
+
   createWeaponForSelected() {
     const weapon = this.getWeapon();
 
-    if (this.lastWeaponId === weapon.id && this.weaponMeshGroup) return;
+    if (this.lastWeaponId === weapon.id && this.selectedHandObject) return;
+
+    if (this.selectedHandObject) {
+      this.clearObjectFromHands(this.selectedHandObject);
+      this.scene.remove(this.selectedHandObject.mesh);
+      this.grabbables = this.grabbables.filter((object) => object !== this.selectedHandObject);
+      this.selectedHandObject = null;
+    }
 
     this.lastWeaponId = weapon.id;
 
-    if (this.weaponMeshGroup) {
-      this.weaponPivot.remove(this.weaponMeshGroup);
+    if (weapon.type === "hand") {
+      return;
     }
 
-    this.weaponMeshGroup = this.createWeaponMesh(weapon);
-    this.weaponPivot.add(this.weaponMeshGroup);
+    const object = this.createGrabbableFromWeapon(
+      weapon,
+      new THREE.Vector3(0.45, 0.90, 3.72),
+      true
+    );
+
+    this.scene.add(object.mesh);
+    this.grabbables.push(object);
+    this.selectedHandObject = object;
+    this.forceGrab("right", object);
+  }
+
+  createGrabbableFromWeapon(weapon, position, selectedObject) {
+    const mesh = this.createWeaponMesh(weapon);
+    mesh.position.copy(position);
+    mesh.castShadow = true;
+
+    mesh.traverse((obj) => {
+      if (obj.isMesh) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+      }
+    });
+
+    return {
+      id: `${weapon.id}_${cryptoRandomId()}`,
+      name: weapon.name,
+      type: weapon.type,
+      mesh,
+      weight: weapon.weight,
+      length: weapon.length,
+      holders: new Set(),
+      primaryHand: null,
+      selectedObject
+    };
   }
 
   createWeaponMesh(weapon) {
@@ -1321,17 +1324,6 @@ class TrainingScene3D {
       color: 0x3c2b1f,
       roughness: 0.8
     });
-
-    if (weapon.type === "hand") {
-      const fistA = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 16), material);
-      fistA.position.set(0.05, 0, -0.34);
-
-      const fistB = fistA.clone();
-      fistB.position.x = -0.08;
-
-      group.add(fistA, fistB);
-      return group;
-    }
 
     if (weapon.type === "heavy") {
       const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, weapon.length, 16), gripMat);
@@ -1429,9 +1421,13 @@ class TrainingScene3D {
   }
 
   update(dt) {
+    this.player.dashCooldown = Math.max(0, this.player.dashCooldown - dt);
+
     this.updateMovement(dt);
     this.updateFacing(dt);
-    this.updateAttack(dt);
+    this.updateHandControls(dt);
+    this.updateRig(dt);
+    this.updateHeldObjects(dt);
     this.updateCamera(dt);
     this.updateHitReaction(dt);
   }
@@ -1454,20 +1450,24 @@ class TrainingScene3D {
       input.normalize();
     }
 
-    let desiredMove = new THREE.Vector3(0, 0, 0);
-    let visualMove = new THREE.Vector3(0, 0, 0);
+    const cameraForward = new THREE.Vector3();
+    this.camera.getWorldDirection(cameraForward);
+    cameraForward.y = 0;
+
+    if (cameraForward.lengthSq() < 0.001) {
+      cameraForward.set(0, 0, -1);
+    }
+
+    cameraForward.normalize();
+
+    const cameraRight = new THREE.Vector3()
+      .crossVectors(cameraForward, new THREE.Vector3(0, 1, 0))
+      .normalize();
+
+    let targetVelocity = new THREE.Vector3();
 
     if (input.lengthSq() > 0.001) {
-      const cameraForward = new THREE.Vector3();
-      this.camera.getWorldDirection(cameraForward);
-      cameraForward.y = 0;
-      cameraForward.normalize();
-
-      const cameraRight = new THREE.Vector3()
-        .crossVectors(cameraForward, new THREE.Vector3(0, 1, 0))
-        .normalize();
-
-      visualMove = new THREE.Vector3()
+      const visualMove = new THREE.Vector3()
         .addScaledVector(cameraRight, input.x)
         .addScaledVector(cameraForward, -input.z);
 
@@ -1475,8 +1475,24 @@ class TrainingScene3D {
         visualMove.normalize();
       }
 
-      desiredMove = visualMove.clone().multiplyScalar(this.player.speed * dt);
+      this.lastVisualMove.copy(visualMove);
+
+      const hasHeavyHeld = this.getHeldWeight() > 1.55;
+      const speedBase = this.keys.has("shift") ? this.player.slowSpeed : this.player.speed;
+      const weightPenalty = hasHeavyHeld ? 0.78 : 1.0;
+
+      targetVelocity.copy(visualMove).multiplyScalar(speedBase * weightPenalty);
     }
+
+    if (this.stepBurst > 0) {
+      targetVelocity.addScaledVector(this.getForwardWorld(), this.stepBurst);
+      this.stepBurst = Math.max(0, this.stepBurst - dt * 7.5);
+    }
+
+    const acceleration = input.lengthSq() > 0.001 ? 1 - Math.exp(-12 * dt) : 1 - Math.exp(-9 * dt);
+    this.velocity.lerp(targetVelocity, acceleration);
+
+    const desiredMove = this.velocity.clone().multiplyScalar(dt);
 
     if (this.physicsWorld && this.characterController && this.playerCollider && this.playerBody) {
       this.characterController.computeColliderMovement(
@@ -1515,8 +1531,16 @@ class TrainingScene3D {
       this.player.position.z = clamp(this.player.position.z, -moveLimit, moveLimit);
     }
 
-    if (input.lengthSq() > 0.001 && !this.getLockOn() && visualMove.lengthSq() > 0.001) {
-      this.player.yaw = Math.atan2(-visualMove.x, -visualMove.z);
+    const speed = this.velocity.length();
+    const maxSpeed = this.keys.has("shift") ? this.player.slowSpeed : this.player.speed;
+    this.moveAmount = clamp(speed / Math.max(0.001, maxSpeed), 0, 1);
+
+    if (speed > 0.03) {
+      this.walkPhase += dt * lerp(5.2, 9.2, this.moveAmount);
+    }
+
+    if (input.lengthSq() > 0.001 && !this.getLockOn()) {
+      this.player.yaw = Math.atan2(-this.lastVisualMove.x, -this.lastVisualMove.z);
     }
 
     this.playerGroup.position.copy(this.player.position);
@@ -1535,28 +1559,293 @@ class TrainingScene3D {
     this.player.yaw = smoothAngle(this.player.yaw, desired, 1 - Math.exp(-8.5 * dt));
   }
 
-  updateAttack(dt) {
-    this.attack.swingX = lerp(this.attack.swingX, this.attack.targetSwingX, 1 - Math.exp(-14 * dt));
-    this.attack.swingY = lerp(this.attack.swingY, this.attack.targetSwingY, 1 - Math.exp(-14 * dt));
+  updateHandControls(dt) {
+    for (const side of ["left", "right"]) {
+      const hand = this.hands[side];
 
-    this.attack.targetSwingX *= Math.exp(-5.5 * dt);
-    this.attack.targetSwingY *= Math.exp(-5.5 * dt);
+      hand.controlX = lerp(hand.controlX, hand.targetControlX, 1 - Math.exp(-15 * dt));
+      hand.controlY = lerp(hand.controlY, hand.targetControlY, 1 - Math.exp(-15 * dt));
 
-    this.attack.thrust += this.attack.thrustVelocity * dt;
-    this.attack.thrustVelocity -= this.attack.thrust * 42 * dt;
-    this.attack.thrustVelocity *= Math.exp(-12 * dt);
-    this.attack.thrust = clamp(this.attack.thrust, 0, 0.72);
+      hand.targetControlX *= Math.exp(-5.8 * dt);
+      hand.targetControlY *= Math.exp(-5.8 * dt);
 
-    const weapon = this.getWeapon();
-    const heaviness = clamp(weapon.weight, 0.65, 2.2);
-    const weightLag = (heaviness - 1) * 0.18;
+      hand.thrust += hand.thrustVelocity * dt;
+      hand.thrustVelocity -= hand.thrust * 42 * dt;
+      hand.thrustVelocity *= Math.exp(-12 * dt);
+      hand.thrust = clamp(hand.thrust, 0, 0.72);
 
-    this.weaponPivot.rotation.x = -0.20 + this.attack.swingY * 0.9 - weightLag;
-    this.weaponPivot.rotation.y = this.attack.swingX * 0.85;
-    this.weaponPivot.rotation.z = -0.10 + this.attack.swingX * 0.25;
-    this.weaponPivot.position.z = -0.28 - this.attack.thrust;
+      hand.reachPulse = Math.max(0, hand.reachPulse - dt * 3.0);
+    }
+  }
 
-    this.attack.flash = Math.max(0, this.attack.flash - dt * 3.2);
+  updateRig(dt) {
+    if (!this.rig) return;
+
+    const rig = this.rig;
+    const phase = this.walkPhase;
+    const move = this.moveAmount;
+
+    const bob = Math.abs(Math.sin(phase * 2)) * 0.035 * move;
+    const sideSway = Math.sin(phase) * 0.035 * move;
+    const pelvisYaw = Math.sin(phase) * 0.11 * move;
+    const pelvisRoll = Math.sin(phase * 2) * 0.035 * move;
+
+    const pelvis = new THREE.Vector3(sideSway, 0.78 + bob, 0);
+    const abdomenA = pelvis.clone().add(new THREE.Vector3(0, 0.08, 0));
+    const abdomenB = new THREE.Vector3(-sideSway * 0.35, 1.10 + bob * 0.6, -0.01);
+
+    const lowerChestA = abdomenB.clone();
+    const lowerChestB = new THREE.Vector3(-sideSway * 0.55, 1.31 + bob * 0.45, -0.03);
+
+    const upperChestA = lowerChestB.clone();
+    const upperChestB = new THREE.Vector3(-sideSway * 0.70, 1.49 + bob * 0.28, -0.04);
+
+    const neckA = upperChestB.clone().add(new THREE.Vector3(0, 0.03, 0.02));
+    const neckB = neckA.clone().add(new THREE.Vector3(0, 0.11, 0));
+
+    const head = neckB.clone().add(new THREE.Vector3(0, 0.19, 0));
+
+    setObjectPosition(rig.boxes.pelvis, pelvis);
+    rig.boxes.pelvis.rotation.set(pelvisRoll, pelvisYaw, pelvisRoll * 0.45);
+
+    rig.limbs.abdomen.set(abdomenA, abdomenB);
+    rig.limbs.lowerChest.set(lowerChestA, lowerChestB);
+    rig.limbs.upperChest.set(upperChestA, upperChestB);
+    rig.limbs.neck.set(neckA, neckB);
+    rig.joints.head.position.copy(head);
+
+    const shoulderLeft = upperChestB.clone().add(new THREE.Vector3(-0.43, -0.06, -0.02));
+    const shoulderRight = upperChestB.clone().add(new THREE.Vector3(0.43, -0.06, -0.02));
+
+    rig.limbs.shoulderLine.set(shoulderLeft, shoulderRight);
+    rig.joints.leftShoulder.position.copy(shoulderLeft);
+    rig.joints.rightShoulder.position.copy(shoulderRight);
+
+    const leftHandTarget = this.getHandTargetLocal("left", shoulderLeft, phase, move);
+    const rightHandTarget = this.getHandTargetLocal("right", shoulderRight, phase, move);
+
+    this.solveArmIK("left", shoulderLeft, leftHandTarget);
+    this.solveArmIK("right", shoulderRight, rightHandTarget);
+
+    const leftHip = pelvis.clone().add(new THREE.Vector3(-0.18, -0.06, 0.01));
+    const rightHip = pelvis.clone().add(new THREE.Vector3(0.18, -0.06, 0.01));
+
+    rig.joints.leftHip.position.copy(leftHip);
+    rig.joints.rightHip.position.copy(rightHip);
+
+    const leftFootTarget = this.getFootTargetLocal("left", phase, move);
+    const rightFootTarget = this.getFootTargetLocal("right", phase + Math.PI, move);
+
+    this.solveLegIK("left", leftHip, leftFootTarget);
+    this.solveLegIK("right", rightHip, rightFootTarget);
+
+    rig.boxes.facingMark.position.set(-sideSway * 0.75, 1.42 + bob * 0.3, -0.36);
+    rig.boxes.facingMark.rotation.set(0, pelvisYaw * -0.35, 0);
+  }
+
+  getHandTargetLocal(side, shoulder, phase, move) {
+    const sign = side === "left" ? -1 : 1;
+    const hand = this.hands[side];
+    const otherSide = side === "left" ? "right" : "left";
+    const otherHand = this.hands[otherSide];
+
+    const armPhase = phase + (side === "left" ? 0 : Math.PI);
+    const naturalSwing = Math.sin(armPhase) * 0.16 * move;
+    const naturalLift = Math.max(0, Math.sin(armPhase)) * 0.04 * move;
+
+    const base = new THREE.Vector3(
+      sign * 0.43,
+      0.91 + naturalLift,
+      -0.35 + naturalSwing
+    );
+
+    if (hand.heldObject) {
+      const twoHanded = hand.heldObject.holders.size >= 2;
+
+      if (twoHanded) {
+        const separation = clamp(hand.heldObject.length * 0.26, 0.26, 0.50);
+        base.set(
+          sign * separation,
+          0.94 - hand.heldObject.weight * 0.02,
+          -0.48
+        );
+      } else {
+        base.set(
+          sign * 0.42,
+          0.90 - hand.heldObject.weight * 0.025,
+          -0.44 - clamp(hand.heldObject.length, 0.4, 1.6) * 0.08
+        );
+      }
+    } else if (otherHand.heldObject && otherHand.heldObject.holders.size >= 2) {
+      base.set(
+        sign * 0.34,
+        0.93,
+        -0.45
+      );
+    }
+
+    base.x += hand.controlX * 0.34;
+    base.y += -hand.controlY * 0.18;
+    base.z += -hand.thrust * 0.55 - hand.reachPulse * 0.15;
+
+    const maxReach = 0.61;
+    const fromShoulder = base.clone().sub(shoulder);
+
+    if (fromShoulder.length() > maxReach) {
+      fromShoulder.setLength(maxReach);
+      base.copy(shoulder).add(fromShoulder);
+    }
+
+    return base;
+  }
+
+  getFootTargetLocal(side, phase, move) {
+    const sign = side === "left" ? -1 : 1;
+    const step = Math.sin(phase) * 0.20 * move;
+    const lift = Math.max(0, Math.cos(phase)) * 0.095 * move;
+    const width = 0.21 + Math.abs(Math.sin(phase)) * 0.015 * move;
+
+    return new THREE.Vector3(
+      sign * width,
+      0.055 + lift,
+      -0.10 + step
+    );
+  }
+
+  solveArmIK(side, shoulder, handTarget) {
+    const rig = this.rig;
+    const sign = side === "left" ? -1 : 1;
+    const upperLength = 0.34;
+    const foreLength = 0.34;
+
+    const pole = new THREE.Vector3(sign * 0.42, -0.18, -0.38);
+    const result = solveTwoBoneIK(shoulder, handTarget, pole, upperLength, foreLength);
+
+    const upperName = `${side}UpperArm`;
+    const foreName = `${side}Forearm`;
+    const elbowName = `${side}Elbow`;
+    const wristName = `${side}Wrist`;
+    const handBoxName = `${side}Hand`;
+
+    rig.limbs[upperName].set(shoulder, result.elbow);
+    rig.limbs[foreName].set(result.elbow, result.end);
+
+    rig.joints[elbowName].position.copy(result.elbow);
+    rig.joints[wristName].position.copy(result.end);
+
+    rig.boxes[handBoxName].position.copy(result.end);
+    rig.boxes[handBoxName].rotation.set(
+      this.hands[side].controlY * 0.8,
+      sign * 0.2 + this.hands[side].controlX * 0.5,
+      sign * -0.12
+    );
+
+    rig.points[`${side}Hand`].copy(result.end);
+
+    this.updateFingers(side, result.end);
+  }
+
+  solveLegIK(side, hip, footTarget) {
+    const rig = this.rig;
+    const sign = side === "left" ? -1 : 1;
+    const thighLength = 0.37;
+    const shinLength = 0.35;
+
+    const pole = new THREE.Vector3(sign * 0.06, -0.25, -0.48);
+    const result = solveTwoBoneIK(hip, footTarget, pole, thighLength, shinLength);
+
+    const thighName = `${side}Thigh`;
+    const shinName = `${side}Shin`;
+    const kneeName = `${side}Knee`;
+    const ankleName = `${side}Ankle`;
+    const footName = `${side}Foot`;
+    const toeName = `${side}Toe`;
+
+    rig.limbs[thighName].set(hip, result.elbow);
+    rig.limbs[shinName].set(result.elbow, result.end);
+
+    rig.joints[kneeName].position.copy(result.elbow);
+    rig.joints[ankleName].position.copy(result.end);
+
+    rig.boxes[footName].position.copy(result.end).add(new THREE.Vector3(0, -0.045, -0.085));
+    rig.boxes[footName].rotation.set(0.04, 0, sign * 0.02);
+
+    rig.boxes[toeName].position.copy(result.end).add(new THREE.Vector3(0, -0.055, -0.245));
+    rig.boxes[toeName].rotation.set(-0.12 * this.moveAmount, 0, 0);
+
+    rig.points[`${side}Foot`].copy(result.end);
+  }
+
+  updateFingers(side, handPosition) {
+    const rig = this.rig;
+    const sign = side === "left" ? -1 : 1;
+    const hand = this.hands[side];
+    const curl = hand.heldObject ? 0.065 : 0.025;
+
+    for (const finger of rig.fingers) {
+      if (finger.side !== sign) continue;
+
+      const x = handPosition.x + sign * finger.index * 0.025;
+      const start = new THREE.Vector3(x, handPosition.y - 0.025, handPosition.z - 0.055);
+      const end = new THREE.Vector3(
+        x + sign * 0.006,
+        handPosition.y - 0.040 - curl * 0.15,
+        handPosition.z - 0.115 + curl
+      );
+
+      finger.limb.set(start, end);
+    }
+  }
+
+  updateHeldObjects(dt) {
+    const handledObjects = new Set();
+
+    for (const side of ["left", "right"]) {
+      const object = this.hands[side].heldObject;
+      if (!object || handledObjects.has(object)) continue;
+
+      handledObjects.add(object);
+
+      const holders = Array.from(object.holders);
+
+      if (holders.length === 0) continue;
+
+      const primary = object.primaryHand || holders[0];
+      const primaryWorld = this.getHandWorldPosition(primary);
+      const forward = this.getForwardWorld();
+      const right = this.getRightWorld();
+      const up = new THREE.Vector3(0, 1, 0);
+
+      if (object.type === "prop") {
+        if (holders.length >= 2) {
+          const left = this.getHandWorldPosition("left");
+          const rightHand = this.getHandWorldPosition("right");
+          object.mesh.position.copy(left).lerp(rightHand, 0.5);
+        } else {
+          object.mesh.position.copy(primaryWorld);
+        }
+      } else {
+        object.mesh.position.copy(primaryWorld);
+        object.mesh.position.addScaledVector(forward, -0.02);
+        object.mesh.position.addScaledVector(right, primary === "right" ? 0.015 : -0.015);
+        object.mesh.position.addScaledVector(up, -0.01);
+
+        const yaw = this.player.yaw;
+        object.mesh.rotation.set(
+          this.getHandPitch(primary) * 0.35,
+          yaw + this.getHandYaw(primary) * 0.35,
+          this.getHandRoll(primary) * 0.35
+        );
+
+        if (holders.length >= 2) {
+          object.mesh.rotation.x *= 0.45;
+          object.mesh.rotation.z *= 0.35;
+        }
+      }
+
+      const lag = clamp(object.weight - 1, 0, 1.2) * 0.08;
+      object.mesh.position.y -= lag * this.moveAmount;
+    }
   }
 
   updateCamera(dt) {
@@ -1602,9 +1891,7 @@ class TrainingScene3D {
         .addScaledVector(side, 0.85)
         .add(new THREE.Vector3(0, cameraHeight, 0));
 
-      const lookTarget = new THREE.Vector3()
-        .copy(center);
-
+      const lookTarget = new THREE.Vector3().copy(center);
       lookTarget.y = 1.05;
 
       this.cameraTarget.lerp(lookTarget, 1 - Math.exp(-6.5 * dt));
@@ -1636,52 +1923,289 @@ class TrainingScene3D {
   }
 
   updateHitReaction(dt) {
-    const tip = this.getWeaponTipWorldPosition();
-
+    const points = this.getInteractionPoints();
     const target = new THREE.Vector3().copy(this.mannequinGroup.position);
     target.y = 1.05 * MANNEQUIN_VISUAL_SCALE;
 
-    const distance = tip.distanceTo(target);
+    let flash = 0;
 
-    if (distance < 0.48) {
-      this.attack.flash = 1;
+    for (const point of points) {
+      if (point.distanceTo(target) < 0.48) {
+        flash = 1;
+        break;
+      }
     }
 
-    const hitScale = 1 + this.attack.flash * 0.035;
+    for (const side of ["left", "right"]) {
+      this.hands[side].hitFlash = Math.max(this.hands[side].hitFlash - dt * 3.2, flash);
+    }
+
+    const hitFlash = Math.max(this.hands.left.hitFlash, this.hands.right.hitFlash);
+    const hitScale = 1 + hitFlash * 0.035;
 
     this.mannequinGroup.scale.set(
       MANNEQUIN_VISUAL_SCALE * hitScale,
-      MANNEQUIN_VISUAL_SCALE * (1 + this.attack.flash * 0.02),
+      MANNEQUIN_VISUAL_SCALE * (1 + hitFlash * 0.02),
       MANNEQUIN_VISUAL_SCALE * hitScale
     );
 
     this.mannequinGroup.traverse((obj) => {
       if (obj.isMesh && obj.material && obj.material.emissive) {
-        obj.material.emissiveIntensity = this.attack.flash * 0.45;
+        obj.material.emissiveIntensity = hitFlash * 0.45;
       }
     });
   }
 
-  getWeaponTipWorldPosition() {
-    const weapon = this.getWeapon();
+  getInteractionPoints() {
+    const points = [
+      this.getHandWorldPosition("left"),
+      this.getHandWorldPosition("right")
+    ];
 
-    const localTip = new THREE.Vector3(
-      0,
-      0,
-      -Math.max(0.42, weapon.length + 0.22)
-    );
+    for (const side of ["left", "right"]) {
+      const hand = this.hands[side];
 
-    return this.weaponPivot.localToWorld(localTip.clone());
+      if (hand.heldObject && hand.heldObject.type !== "prop") {
+        const object = hand.heldObject;
+        const tip = new THREE.Vector3(0, 0, -Math.max(0.42, object.length + 0.22));
+        object.mesh.localToWorld(tip);
+        points.push(tip);
+      }
+    }
+
+    return points;
+  }
+
+  onKeyDown(event) {
+    const key = event.key.toLowerCase();
+
+    if (["q", "e", "r", "l", " "].includes(key)) {
+      event.preventDefault();
+    }
+
+    if (event.repeat) {
+      this.keys.add(key);
+      return;
+    }
+
+    this.keys.add(key);
+
+    if (key === "q") {
+      this.toggleHandGrip("left");
+      return;
+    }
+
+    if (key === "e") {
+      this.toggleHandGrip("right");
+      return;
+    }
+
+    if (key === "r") {
+      this.toggleTwoHandedGrip();
+      return;
+    }
+
+    if (key === "l") {
+      state.lockOn = !state.lockOn;
+      updateLockButton();
+      return;
+    }
+
+    if (key === " " && this.player.dashCooldown <= 0) {
+      this.stepBurst = 4.2;
+      this.player.dashCooldown = 0.45;
+    }
+  }
+
+  onKeyUp(event) {
+    this.keys.delete(event.key.toLowerCase());
+  }
+
+  toggleHandGrip(side) {
+    const hand = this.hands[side];
+
+    if (hand.heldObject) {
+      this.releaseHand(side);
+      return;
+    }
+
+    const nearest = this.findNearestGrabbable(side);
+
+    if (nearest) {
+      this.forceGrab(side, nearest);
+      hand.reachPulse = 1;
+    }
+  }
+
+  toggleTwoHandedGrip() {
+    const leftObject = this.hands.left.heldObject;
+    const rightObject = this.hands.right.heldObject;
+
+    if (leftObject && rightObject && leftObject === rightObject) {
+      if (leftObject.primaryHand === "right") {
+        this.releaseHand("left");
+      } else {
+        this.releaseHand("right");
+      }
+
+      return;
+    }
+
+    if (rightObject && !leftObject) {
+      this.forceGrab("left", rightObject);
+      return;
+    }
+
+    if (leftObject && !rightObject) {
+      this.forceGrab("right", leftObject);
+    }
+  }
+
+  forceGrab(side, object) {
+    const hand = this.hands[side];
+
+    if (hand.heldObject && hand.heldObject !== object) {
+      this.releaseHand(side);
+    }
+
+    hand.heldObject = object;
+    hand.reachPulse = 1;
+
+    object.holders.add(side);
+
+    if (!object.primaryHand) {
+      object.primaryHand = side;
+    }
+  }
+
+  releaseHand(side) {
+    const hand = this.hands[side];
+    const object = hand.heldObject;
+
+    if (!object) return;
+
+    object.holders.delete(side);
+    hand.heldObject = null;
+    hand.reachPulse = 0.4;
+
+    if (object.primaryHand === side) {
+      object.primaryHand = object.holders.values().next().value ?? null;
+    }
+
+    if (object.holders.size === 0) {
+      object.primaryHand = null;
+
+      const position = object.mesh.position;
+      position.y = object.type === "prop" ? 0.18 : Math.max(0.20, position.y);
+
+      if (object.type !== "prop") {
+        object.mesh.rotation.x = 0;
+        object.mesh.rotation.z = 0;
+      }
+    }
+  }
+
+  clearObjectFromHands(object) {
+    for (const side of ["left", "right"]) {
+      if (this.hands[side].heldObject === object) {
+        this.hands[side].heldObject = null;
+      }
+    }
+
+    object.holders.clear();
+    object.primaryHand = null;
+  }
+
+  findNearestGrabbable(side) {
+    const handWorld = this.getHandWorldPosition(side);
+    let nearest = null;
+    let nearestDistance = Infinity;
+
+    for (const object of this.grabbables) {
+      if (object.holders.size > 0) continue;
+
+      const distance = handWorld.distanceTo(object.mesh.position);
+
+      if (distance < nearestDistance && distance <= 0.95) {
+        nearest = object;
+        nearestDistance = distance;
+      }
+    }
+
+    return nearest;
+  }
+
+  getHandWorldPosition(side) {
+    if (!this.rig || !this.playerGroup) {
+      return new THREE.Vector3();
+    }
+
+    const local = this.rig.points[`${side}Hand`].clone();
+    return this.playerGroup.localToWorld(local);
+  }
+
+  getForwardWorld() {
+    return new THREE.Vector3(
+      -Math.sin(this.player.yaw),
+      0,
+      -Math.cos(this.player.yaw)
+    ).normalize();
+  }
+
+  getRightWorld() {
+    return new THREE.Vector3(
+      Math.cos(this.player.yaw),
+      0,
+      -Math.sin(this.player.yaw)
+    ).normalize();
+  }
+
+  getHandYaw(side) {
+    const hand = this.hands[side];
+    const sign = side === "left" ? -1 : 1;
+    return sign * 0.18 + hand.controlX * 0.9;
+  }
+
+  getHandPitch(side) {
+    const hand = this.hands[side];
+    return -0.18 + hand.controlY * 0.75 - hand.thrust * 0.18;
+  }
+
+  getHandRoll(side) {
+    const hand = this.hands[side];
+    const sign = side === "left" ? -1 : 1;
+    return sign * -0.10 + hand.controlX * 0.30;
+  }
+
+  getHeldWeight() {
+    const objects = new Set();
+
+    for (const side of ["left", "right"]) {
+      const object = this.hands[side].heldObject;
+      if (object) objects.add(object);
+    }
+
+    let total = 0;
+
+    for (const object of objects) {
+      total += object.weight ?? 1;
+    }
+
+    return total;
   }
 
   onAttackDown(event) {
     if (event.target.closest?.(".move-stick")) return;
 
+    event.preventDefault();
+
     this.canvas.setPointerCapture?.(event.pointerId);
 
     const point = this.getStagePoint(event);
+    const hand = event.button === 2 ? "left" : "right";
 
     this.pointerAttack.active = true;
+    this.pointerAttack.hand = hand;
     this.pointerAttack.startX = point.x;
     this.pointerAttack.startY = point.y;
     this.pointerAttack.x = point.x;
@@ -1689,13 +2213,16 @@ class TrainingScene3D {
     this.pointerAttack.lastX = point.x;
     this.pointerAttack.lastY = point.y;
     this.pointerAttack.startTime = performance.now();
-    this.pointerAttack.points = [{ x: point.x, y: point.y, life: 1 }];
+    this.pointerAttack.points = [{ x: point.x, y: point.y, life: 1, hand }];
   }
 
   onAttackMove(event) {
     if (!this.pointerAttack.active) return;
 
+    event.preventDefault();
+
     const point = this.getStagePoint(event);
+    const hand = this.hands[this.pointerAttack.hand];
 
     const width = this.stage.clientWidth;
     const height = this.stage.clientHeight;
@@ -1703,8 +2230,8 @@ class TrainingScene3D {
     const dx = (point.x - this.pointerAttack.lastX) / Math.max(1, width);
     const dy = (point.y - this.pointerAttack.lastY) / Math.max(1, height);
 
-    this.attack.targetSwingX = clamp(this.attack.targetSwingX + dx * 9.5, -1.25, 1.25);
-    this.attack.targetSwingY = clamp(this.attack.targetSwingY + dy * 7.5, -1.05, 1.05);
+    hand.targetControlX = clamp(hand.targetControlX + dx * 8.5, -1.25, 1.25);
+    hand.targetControlY = clamp(hand.targetControlY + dy * 7.0, -1.05, 1.05);
 
     this.pointerAttack.lastX = point.x;
     this.pointerAttack.lastY = point.y;
@@ -1714,12 +2241,15 @@ class TrainingScene3D {
     this.pointerAttack.points.push({
       x: point.x,
       y: point.y,
-      life: 1
+      life: 1,
+      hand: this.pointerAttack.hand
     });
   }
 
   onAttackUp(event) {
     if (!this.pointerAttack.active) return;
+
+    event.preventDefault();
 
     const point = this.getStagePoint(event);
 
@@ -1728,8 +2258,11 @@ class TrainingScene3D {
     const distance = Math.sqrt(totalDx * totalDx + totalDy * totalDy);
     const duration = performance.now() - this.pointerAttack.startTime;
 
+    const hand = this.hands[this.pointerAttack.hand];
+
     if (duration < 230 && distance < 18) {
-      this.attack.thrustVelocity = 8.5;
+      hand.thrustVelocity = 8.5;
+      hand.reachPulse = 0.8;
     }
 
     this.pointerAttack.active = false;
@@ -1826,8 +2359,9 @@ class TrainingScene3D {
       const b = this.pointerAttack.points[i];
 
       const alpha = Math.max(0, Math.min(a.life, b.life));
+      const color = b.hand === "left" ? "146, 190, 255" : "217, 181, 111";
 
-      ctx.strokeStyle = `rgba(217, 181, 111, ${alpha * 0.8})`;
+      ctx.strokeStyle = `rgba(${color}, ${alpha * 0.8})`;
       ctx.lineWidth = 4 + alpha * 4;
 
       ctx.beginPath();
@@ -1838,6 +2372,91 @@ class TrainingScene3D {
 
     ctx.restore();
   }
+}
+
+class DynamicLimb {
+  constructor(radius, material, radialSegments = 12) {
+    this.radius = radius;
+    this.mesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(radius, radius, 1, radialSegments),
+      material
+    );
+
+    this.mesh.castShadow = true;
+    this.mesh.receiveShadow = true;
+  }
+
+  set(start, end) {
+    const direction = new THREE.Vector3().subVectors(end, start);
+    const length = Math.max(0.001, direction.length());
+
+    this.mesh.scale.set(1, length, 1);
+    this.mesh.position.copy(start).add(end).multiplyScalar(0.5);
+
+    const normalizedDirection = direction.clone().normalize();
+    const up = new THREE.Vector3(0, 1, 0);
+    this.mesh.quaternion.setFromUnitVectors(up, normalizedDirection);
+  }
+}
+
+function createHandState(side) {
+  return {
+    side,
+    heldObject: null,
+    controlX: 0,
+    controlY: 0,
+    targetControlX: 0,
+    targetControlY: 0,
+    thrust: 0,
+    thrustVelocity: 0,
+    reachPulse: 0,
+    hitFlash: 0
+  };
+}
+
+function solveTwoBoneIK(root, target, pole, upperLength, lowerLength) {
+  const rootToTarget = new THREE.Vector3().subVectors(target, root);
+  let distance = rootToTarget.length();
+
+  const minDistance = Math.abs(upperLength - lowerLength) + 0.001;
+  const maxDistance = upperLength + lowerLength - 0.001;
+
+  distance = clamp(distance, minDistance, maxDistance);
+
+  const direction = rootToTarget.lengthSq() > 0.0001
+    ? rootToTarget.clone().normalize()
+    : new THREE.Vector3(0, -1, 0);
+
+  const clampedTarget = root.clone().addScaledVector(direction, distance);
+
+  const a = (upperLength * upperLength - lowerLength * lowerLength + distance * distance) / (2 * distance);
+  const hSq = Math.max(0, upperLength * upperLength - a * a);
+  const h = Math.sqrt(hSq);
+
+  let poleDirection = pole.clone();
+
+  if (poleDirection.lengthSq() < 0.0001) {
+    poleDirection.set(0, 0, -1);
+  }
+
+  poleDirection.normalize();
+  poleDirection.sub(direction.clone().multiplyScalar(poleDirection.dot(direction)));
+
+  if (poleDirection.lengthSq() < 0.0001) {
+    poleDirection = new THREE.Vector3(0, 0, -1);
+    poleDirection.sub(direction.clone().multiplyScalar(poleDirection.dot(direction)));
+  }
+
+  poleDirection.normalize();
+
+  const elbow = root.clone()
+    .addScaledVector(direction, a)
+    .addScaledVector(poleDirection, h);
+
+  return {
+    elbow,
+    end: clampedTarget
+  };
 }
 
 function createLimb(start, end, radius, material, radialSegments = 12) {
@@ -1873,6 +2492,20 @@ function createBoxPart(size, position, material) {
   mesh.castShadow = true;
   mesh.receiveShadow = true;
   return mesh;
+}
+
+function setObjectPosition(object, position) {
+  object.position.copy(position);
+}
+
+function cryptoRandomId() {
+  if (window.crypto && window.crypto.getRandomValues) {
+    const array = new Uint32Array(1);
+    window.crypto.getRandomValues(array);
+    return array[0].toString(16);
+  }
+
+  return Math.floor(Math.random() * 1_000_000_000).toString(16);
 }
 
 function clamp(value, min, max) {
