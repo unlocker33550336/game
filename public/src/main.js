@@ -89,6 +89,20 @@ const weaponCategories = [
   }
 ];
 
+const styleRanks = [
+  "見習い",
+  "門下生",
+  "正門下",
+  "上位門下",
+  "師範代候補"
+];
+
+const formExamples = [
+  "一撃必殺型",
+  "カウンター型",
+  "連撃型"
+];
+
 const weapons = [
   {
     id: "barehand",
@@ -365,8 +379,16 @@ function renderStyleBoard() {
         武器ごとに流派カテゴリをまとめ、プレイヤーが自分で行き先を選ぶためのもの。
       </p>
       <div class="board">${rows}</div>
+
+      <div class="note" style="margin-top:18px;">
+        流派は、見学と稽古を中心に体験してから入門する。
+        入門後は ${styleRanks.join(" → ")} の順に立場が上がっていく。
+        また、1つの流派の中にも ${formExamples.join(" / ")} のような複数の型があり、
+        プレイヤーの戦い方によって少しずつ寄っていく。
+      </div>
+
       <p class="footer-hint">
-        現時点ではカテゴリだけを実装。流派名、師範、道場位置、入門条件は未決定なので入れていない。
+        現時点ではカテゴリと仕組みだけを実装。流派名、師範、道場位置、入門条件は未決定なので入れていない。
       </p>
     `,
     actions: `<button class="btn primary" data-action="go-lobby">ロビーへ戻る</button>`
@@ -910,9 +932,19 @@ class TrainingScene3D {
       roughness: 0.7
     });
 
+    const darkCloth = new THREE.MeshStandardMaterial({
+      color: 0x263044,
+      roughness: 0.74
+    });
+
     const skin = new THREE.MeshStandardMaterial({
       color: 0xd8ad78,
       roughness: 0.72
+    });
+
+    const jointMat = new THREE.MeshStandardMaterial({
+      color: 0x6f7d96,
+      roughness: 0.66
     });
 
     const accent = new THREE.MeshStandardMaterial({
@@ -920,39 +952,172 @@ class TrainingScene3D {
       roughness: 0.55
     });
 
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.38, 0.95, 16), cloth);
-    body.position.y = 1.05;
-    body.castShadow = true;
+    const pelvis = createBoxPart(new THREE.Vector3(0.48, 0.20, 0.30), new THREE.Vector3(0, 0.78, 0), darkCloth);
+    const abdomen = createLimb(new THREE.Vector3(0, 0.86, 0), new THREE.Vector3(0, 1.10, -0.01), 0.25, cloth, 18);
+    const lowerChest = createLimb(new THREE.Vector3(0, 1.09, -0.01), new THREE.Vector3(0, 1.31, -0.03), 0.30, cloth, 18);
+    const upperChest = createLimb(new THREE.Vector3(0, 1.30, -0.03), new THREE.Vector3(0, 1.49, -0.04), 0.34, cloth, 18);
 
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 20), skin);
-    head.position.y = 1.72;
+    const neck = createLimb(new THREE.Vector3(0, 1.52, -0.02), new THREE.Vector3(0, 1.63, -0.02), 0.095, skin, 14);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 22, 22), skin);
+    head.position.set(0, 1.82, -0.02);
     head.castShadow = true;
 
-    const leftLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.12, 0.75, 12), cloth);
-    leftLeg.position.set(-0.16, 0.38, 0);
-    leftLeg.castShadow = true;
+    const shoulderLine = createLimb(
+      new THREE.Vector3(-0.42, 1.43, -0.03),
+      new THREE.Vector3(0.42, 1.43, -0.03),
+      0.055,
+      darkCloth,
+      12
+    );
 
-    const rightLeg = leftLeg.clone();
-    rightLeg.position.x = 0.16;
+    const leftShoulder = createJoint(new THREE.Vector3(-0.46, 1.41, -0.04), 0.095, jointMat);
+    const rightShoulder = createJoint(new THREE.Vector3(0.46, 1.41, -0.04), 0.095, jointMat);
 
-    const leftArm = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.72, 12), cloth);
-    leftArm.position.set(-0.42, 1.12, -0.08);
-    leftArm.rotation.z = 0.18;
-    leftArm.castShadow = true;
+    const leftUpperArm = createLimb(
+      new THREE.Vector3(-0.48, 1.36, -0.04),
+      new THREE.Vector3(-0.58, 1.12, -0.10),
+      0.075,
+      cloth,
+      12
+    );
+    const rightUpperArm = createLimb(
+      new THREE.Vector3(0.48, 1.36, -0.04),
+      new THREE.Vector3(0.58, 1.12, -0.10),
+      0.075,
+      cloth,
+      12
+    );
 
-    const rightArm = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.085, 0.72, 12), cloth);
-    rightArm.position.set(0.42, 1.12, -0.08);
-    rightArm.rotation.z = -0.18;
-    rightArm.castShadow = true;
+    const leftElbow = createJoint(new THREE.Vector3(-0.58, 1.12, -0.10), 0.075, jointMat);
+    const rightElbow = createJoint(new THREE.Vector3(0.58, 1.12, -0.10), 0.075, jointMat);
+
+    const leftForearm = createLimb(
+      new THREE.Vector3(-0.58, 1.10, -0.10),
+      new THREE.Vector3(-0.45, 0.92, -0.30),
+      0.060,
+      cloth,
+      12
+    );
+    const rightForearm = createLimb(
+      new THREE.Vector3(0.58, 1.10, -0.10),
+      new THREE.Vector3(0.45, 0.92, -0.30),
+      0.060,
+      cloth,
+      12
+    );
+
+    const leftWrist = createJoint(new THREE.Vector3(-0.45, 0.92, -0.30), 0.045, jointMat);
+    const rightWrist = createJoint(new THREE.Vector3(0.45, 0.92, -0.30), 0.045, jointMat);
+
+    const leftHand = createBoxPart(new THREE.Vector3(0.11, 0.07, 0.16), new THREE.Vector3(-0.43, 0.88, -0.38), skin);
+    const rightHand = createBoxPart(new THREE.Vector3(0.11, 0.07, 0.16), new THREE.Vector3(0.43, 0.88, -0.38), skin);
+
+    const fingerParts = [];
+    for (let side of [-1, 1]) {
+      for (let i = -1; i <= 1; i += 1) {
+        fingerParts.push(
+          createLimb(
+            new THREE.Vector3(side * (0.43 + i * 0.025), 0.86, -0.43),
+            new THREE.Vector3(side * (0.43 + i * 0.030), 0.84, -0.51),
+            0.012,
+            skin,
+            8
+          )
+        );
+      }
+    }
+
+    const leftHip = createJoint(new THREE.Vector3(-0.18, 0.72, 0.01), 0.085, jointMat);
+    const rightHip = createJoint(new THREE.Vector3(0.18, 0.72, 0.01), 0.085, jointMat);
+
+    const leftThigh = createLimb(
+      new THREE.Vector3(-0.18, 0.68, 0.01),
+      new THREE.Vector3(-0.20, 0.40, -0.01),
+      0.095,
+      darkCloth,
+      14
+    );
+    const rightThigh = createLimb(
+      new THREE.Vector3(0.18, 0.68, 0.01),
+      new THREE.Vector3(0.20, 0.40, -0.01),
+      0.095,
+      darkCloth,
+      14
+    );
+
+    const leftKnee = createJoint(new THREE.Vector3(-0.20, 0.39, -0.01), 0.075, jointMat);
+    const rightKnee = createJoint(new THREE.Vector3(0.20, 0.39, -0.01), 0.075, jointMat);
+
+    const leftShin = createLimb(
+      new THREE.Vector3(-0.20, 0.35, -0.01),
+      new THREE.Vector3(-0.21, 0.14, -0.02),
+      0.070,
+      cloth,
+      12
+    );
+    const rightShin = createLimb(
+      new THREE.Vector3(0.20, 0.35, -0.01),
+      new THREE.Vector3(0.21, 0.14, -0.02),
+      0.070,
+      cloth,
+      12
+    );
+
+    const leftAnkle = createJoint(new THREE.Vector3(-0.21, 0.12, -0.02), 0.055, jointMat);
+    const rightAnkle = createJoint(new THREE.Vector3(0.21, 0.12, -0.02), 0.055, jointMat);
+
+    const leftFoot = createBoxPart(new THREE.Vector3(0.16, 0.07, 0.28), new THREE.Vector3(-0.21, 0.055, -0.11), darkCloth);
+    const rightFoot = createBoxPart(new THREE.Vector3(0.16, 0.07, 0.28), new THREE.Vector3(0.21, 0.055, -0.11), darkCloth);
+
+    const leftToe = createBoxPart(new THREE.Vector3(0.15, 0.045, 0.10), new THREE.Vector3(-0.21, 0.045, -0.28), darkCloth);
+    const rightToe = createBoxPart(new THREE.Vector3(0.15, 0.045, 0.10), new THREE.Vector3(0.21, 0.045, -0.28), darkCloth);
 
     const facingMark = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.08, 0.24), accent);
-    facingMark.position.set(0, 1.43, -0.34);
+    facingMark.position.set(0, 1.42, -0.36);
     facingMark.castShadow = true;
 
     this.weaponPivot = new THREE.Group();
-    this.weaponPivot.position.set(0.38, 1.15, -0.28);
+    this.weaponPivot.position.set(0.43, 0.90, -0.42);
 
-    group.add(body, head, leftLeg, rightLeg, leftArm, rightArm, facingMark, this.weaponPivot);
+    group.add(
+      pelvis,
+      abdomen,
+      lowerChest,
+      upperChest,
+      neck,
+      head,
+      shoulderLine,
+      leftShoulder,
+      rightShoulder,
+      leftUpperArm,
+      rightUpperArm,
+      leftElbow,
+      rightElbow,
+      leftForearm,
+      rightForearm,
+      leftWrist,
+      rightWrist,
+      leftHand,
+      rightHand,
+      ...fingerParts,
+      leftHip,
+      rightHip,
+      leftThigh,
+      rightThigh,
+      leftKnee,
+      rightKnee,
+      leftShin,
+      rightShin,
+      leftAnkle,
+      rightAnkle,
+      leftFoot,
+      rightFoot,
+      leftToe,
+      rightToe,
+      facingMark,
+      this.weaponPivot
+    );
+
     group.scale.setScalar(PLAYER_VISUAL_SCALE);
 
     return group;
@@ -964,6 +1129,11 @@ class TrainingScene3D {
     const wood = new THREE.MeshStandardMaterial({
       color: 0x9b7447,
       roughness: 0.92
+    });
+
+    const jointWood = new THREE.MeshStandardMaterial({
+      color: 0x80613d,
+      roughness: 0.94
     });
 
     const marker = new THREE.MeshStandardMaterial({
@@ -978,34 +1148,147 @@ class TrainingScene3D {
     base.castShadow = true;
     base.receiveShadow = true;
 
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.75, 16), wood);
-    pole.position.y = 0.95;
-    pole.castShadow = true;
+    const pelvis = createBoxPart(new THREE.Vector3(0.46, 0.18, 0.28), new THREE.Vector3(0, 0.72, 0), wood);
+    const abdomen = createLimb(new THREE.Vector3(0, 0.80, 0), new THREE.Vector3(0, 1.02, -0.01), 0.22, wood, 18);
+    const lowerTorso = createLimb(new THREE.Vector3(0, 1.00, -0.01), new THREE.Vector3(0, 1.20, -0.02), 0.27, wood, 18);
+    const upperTorso = createLimb(new THREE.Vector3(0, 1.18, -0.02), new THREE.Vector3(0, 1.38, -0.03), 0.31, wood, 18);
 
-    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 0.72, 18), wood);
-    torso.position.y = 1.18;
-    torso.castShadow = true;
-
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 20, 20), wood);
-    head.position.y = 1.68;
+    const neck = createLimb(new THREE.Vector3(0, 1.42, -0.02), new THREE.Vector3(0, 1.53, -0.02), 0.08, jointWood, 12);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 20, 20), wood);
+    head.position.y = 1.71;
     head.castShadow = true;
 
-    const line = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.32), marker);
-    line.position.set(0, 1.42, -0.25);
-    line.castShadow = true;
+    const shoulderLine = createLimb(
+      new THREE.Vector3(-0.41, 1.32, -0.02),
+      new THREE.Vector3(0.41, 1.32, -0.02),
+      0.055,
+      wood,
+      12
+    );
 
-    const armGeo = new THREE.CylinderGeometry(0.055, 0.055, 0.82, 12);
+    const leftShoulder = createJoint(new THREE.Vector3(-0.45, 1.31, -0.02), 0.08, jointWood);
+    const rightShoulder = createJoint(new THREE.Vector3(0.45, 1.31, -0.02), 0.08, jointWood);
 
-    const leftArm = new THREE.Mesh(armGeo, wood);
-    leftArm.position.set(-0.43, 1.28, 0);
-    leftArm.rotation.z = Math.PI / 2.7;
-    leftArm.castShadow = true;
+    const leftUpperArm = createLimb(
+      new THREE.Vector3(-0.47, 1.28, -0.02),
+      new THREE.Vector3(-0.62, 1.06, 0.00),
+      0.055,
+      wood,
+      12
+    );
+    const rightUpperArm = createLimb(
+      new THREE.Vector3(0.47, 1.28, -0.02),
+      new THREE.Vector3(0.62, 1.06, 0.00),
+      0.055,
+      wood,
+      12
+    );
 
-    const rightArm = leftArm.clone();
-    rightArm.position.x = 0.43;
-    rightArm.rotation.z = -Math.PI / 2.7;
+    const leftElbow = createJoint(new THREE.Vector3(-0.62, 1.06, 0.00), 0.055, jointWood);
+    const rightElbow = createJoint(new THREE.Vector3(0.62, 1.06, 0.00), 0.055, jointWood);
 
-    group.add(base, pole, torso, head, line, leftArm, rightArm);
+    const leftForearm = createLimb(
+      new THREE.Vector3(-0.62, 1.04, 0.00),
+      new THREE.Vector3(-0.52, 0.86, -0.15),
+      0.045,
+      wood,
+      12
+    );
+    const rightForearm = createLimb(
+      new THREE.Vector3(0.62, 1.04, 0.00),
+      new THREE.Vector3(0.52, 0.86, -0.15),
+      0.045,
+      wood,
+      12
+    );
+
+    const leftWrist = createJoint(new THREE.Vector3(-0.52, 0.86, -0.15), 0.040, jointWood);
+    const rightWrist = createJoint(new THREE.Vector3(0.52, 0.86, -0.15), 0.040, jointWood);
+
+    const leftHand = createBoxPart(new THREE.Vector3(0.09, 0.055, 0.13), new THREE.Vector3(-0.50, 0.82, -0.23), wood);
+    const rightHand = createBoxPart(new THREE.Vector3(0.09, 0.055, 0.13), new THREE.Vector3(0.50, 0.82, -0.23), wood);
+
+    const leftHip = createJoint(new THREE.Vector3(-0.18, 0.65, 0), 0.07, jointWood);
+    const rightHip = createJoint(new THREE.Vector3(0.18, 0.65, 0), 0.07, jointWood);
+
+    const leftThigh = createLimb(
+      new THREE.Vector3(-0.18, 0.62, 0),
+      new THREE.Vector3(-0.20, 0.38, -0.01),
+      0.075,
+      wood,
+      12
+    );
+    const rightThigh = createLimb(
+      new THREE.Vector3(0.18, 0.62, 0),
+      new THREE.Vector3(0.20, 0.38, -0.01),
+      0.075,
+      wood,
+      12
+    );
+
+    const leftKnee = createJoint(new THREE.Vector3(-0.20, 0.37, -0.01), 0.058, jointWood);
+    const rightKnee = createJoint(new THREE.Vector3(0.20, 0.37, -0.01), 0.058, jointWood);
+
+    const leftShin = createLimb(
+      new THREE.Vector3(-0.20, 0.34, -0.01),
+      new THREE.Vector3(-0.21, 0.16, -0.02),
+      0.055,
+      wood,
+      12
+    );
+    const rightShin = createLimb(
+      new THREE.Vector3(0.20, 0.34, -0.01),
+      new THREE.Vector3(0.21, 0.16, -0.02),
+      0.055,
+      wood,
+      12
+    );
+
+    const leftAnkle = createJoint(new THREE.Vector3(-0.21, 0.14, -0.02), 0.045, jointWood);
+    const rightAnkle = createJoint(new THREE.Vector3(0.21, 0.14, -0.02), 0.045, jointWood);
+
+    const leftFoot = createBoxPart(new THREE.Vector3(0.14, 0.055, 0.22), new THREE.Vector3(-0.21, 0.08, -0.09), wood);
+    const rightFoot = createBoxPart(new THREE.Vector3(0.14, 0.055, 0.22), new THREE.Vector3(0.21, 0.08, -0.09), wood);
+
+    const markerLine = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.32), marker);
+    markerLine.position.set(0, 1.26, -0.26);
+    markerLine.castShadow = true;
+
+    group.add(
+      base,
+      pelvis,
+      abdomen,
+      lowerTorso,
+      upperTorso,
+      neck,
+      head,
+      shoulderLine,
+      leftShoulder,
+      rightShoulder,
+      leftUpperArm,
+      rightUpperArm,
+      leftElbow,
+      rightElbow,
+      leftForearm,
+      rightForearm,
+      leftWrist,
+      rightWrist,
+      leftHand,
+      rightHand,
+      leftHip,
+      rightHip,
+      leftThigh,
+      rightThigh,
+      leftKnee,
+      rightKnee,
+      leftShin,
+      rightShin,
+      leftAnkle,
+      rightAnkle,
+      leftFoot,
+      rightFoot,
+      markerLine
+    );
 
     return group;
   }
@@ -1555,6 +1838,41 @@ class TrainingScene3D {
 
     ctx.restore();
   }
+}
+
+function createLimb(start, end, radius, material, radialSegments = 12) {
+  const direction = new THREE.Vector3().subVectors(end, start);
+  const length = direction.length();
+
+  const geometry = new THREE.CylinderGeometry(radius, radius, length, radialSegments);
+  const mesh = new THREE.Mesh(geometry, material);
+
+  mesh.position.copy(start).add(end).multiplyScalar(0.5);
+
+  const normalizedDirection = direction.clone().normalize();
+  const up = new THREE.Vector3(0, 1, 0);
+  mesh.quaternion.setFromUnitVectors(up, normalizedDirection);
+
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+
+  return mesh;
+}
+
+function createJoint(position, radius, material) {
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 14, 14), material);
+  mesh.position.copy(position);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
+}
+
+function createBoxPart(size, position, material) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), material);
+  mesh.position.copy(position);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  return mesh;
 }
 
 function clamp(value, min, max) {
