@@ -5,20 +5,34 @@ const app = document.getElementById("app");
 
 const SCREENS = {
   TITLE: "TITLE",
-  ENV_SELECT: "ENV_SELECT",
-  MARTIAL_CITY: "MARTIAL_CITY",
-  TRIAL_LOBBY: "TRIAL_LOBBY",
-  RECEPTION: "RECEPTION",
-  CONTROL_GUIDE: "CONTROL_GUIDE",
-  TRIAL_ROOM: "TRIAL_ROOM",
-  STYLE_BOARD: "STYLE_BOARD"
+  REGISTER: "REGISTER",
+  WEAPON_SELECT: "WEAPON_SELECT",
+  TOWER_GATE: "TOWER_GATE",
+  TOWER_FLOOR: "TOWER_FLOOR"
 };
 
 const state = {
   screen: SCREENS.TITLE,
-  initialEnvironment: null,
-  selectedWeaponId: "barehand",
-  lockOn: true
+  mainWeaponId: null,
+  selectedWeaponId: null,
+  lockOn: true,
+  towerMemory: {
+    battles: 0,
+    totalContacts: 0,
+    rightHandUses: 0,
+    leftHandUses: 0,
+    grabs: 0,
+    dashes: 0,
+    closeRangeTime: 0,
+    bladeArcActions: 0,
+    barehandActions: 0,
+    pressureMoments: 0
+  },
+  hiddenTalent: {
+    internalId: null,
+    stage: 0,
+    echoes: []
+  }
 };
 
 const ROOM_HALF_SIZE = 9;
@@ -35,130 +49,113 @@ function ensureRapierReady() {
   return rapierInitPromise;
 }
 
-const initialEnvironments = [
-  {
-    id: "bujin",
-    name: "武人",
-    status: "実装済み",
-    description: "武術都市から始まる。お試し場で武器に触れ、自分の感覚で流派を探す。"
-  },
-  {
-    id: "assassin",
-    name: "殺し屋",
-    status: "未設計",
-    description: "裏社会・依頼・情報屋などの詳細が未決定のため、今は選択不可。"
-  },
-  {
-    id: "wanderer",
-    name: "流浪",
-    status: "未設計",
-    description: "旅・野試合・無所属の導線が未決定のため、今は選択不可。"
-  },
-  {
-    id: "soldier",
-    name: "軍人",
-    status: "未設計",
-    description: "軍施設・任務・部隊の導線が未決定のため、今は選択不可。"
-  }
-];
-
-const weaponCategories = [
-  {
-    name: "素手系",
-    description: "武器を持たない身体操作、近距離の攻防、構え、踏み込みを扱う流派カテゴリ。"
-  },
-  {
-    name: "ナイフ系",
-    description: "短い練習武器を使う流派カテゴリ。近い距離での素早い出入りを学ぶ。"
-  },
-  {
-    name: "刀系",
-    description: "練習刀などを使う流派カテゴリ。間合い、軌道、構えの安定を学ぶ。"
-  },
-  {
-    name: "長物系",
-    description: "棒や槍型の練習具など、長い道具を扱う流派カテゴリ。距離の管理を学ぶ。"
-  },
-  {
-    name: "重量武器系",
-    description: "重さのある練習具を扱う流派カテゴリ。振り始め、止め方、体重移動が重要になる。"
-  },
-  {
-    name: "特殊武器系",
-    description: "鎖状・変形・防御具寄りなど、通常カテゴリに収まらない道具を扱う流派カテゴリ。"
-  }
-];
-
-const styleRanks = [
-  "見習い",
-  "門下生",
-  "正門下",
-  "上位門下",
-  "師範代候補"
-];
-
-const formExamples = [
-  "一撃必殺型",
-  "カウンター型",
-  "連撃型"
-];
-
 const weapons = [
   {
     id: "barehand",
     name: "素手",
-    category: "素手系",
+    category: "身体操作型",
     type: "hand",
+    talentAffinity: "barehand",
     length: 0.42,
     weight: 0.65,
-    color: 0xd8ad78
-  },
-  {
-    id: "practiceKnife",
-    name: "練習用ナイフ",
-    category: "ナイフ系",
-    type: "short",
-    length: 0.66,
-    weight: 0.85,
-    color: 0xcfd7df
+    color: 0xd8ad78,
+    description: "身体そのものを武器にする。距離、反応、体勢、瞬間判断が重要になる。"
   },
   {
     id: "practiceBlade",
-    name: "練習刀",
+    name: "刀剣型",
     category: "刀系",
     type: "blade",
+    talentAffinity: "blade",
     length: 1.05,
     weight: 1.05,
-    color: 0xdfe7ee
+    color: 0xdfe7ee,
+    description: "一本の軌道、踏み込み、間合い、通すべき点を重視する。"
+  },
+  {
+    id: "practiceKnife",
+    name: "短刃型",
+    category: "軽量武器系",
+    type: "short",
+    talentAffinity: "none",
+    length: 0.66,
+    weight: 0.85,
+    color: 0xcfd7df,
+    description: "近い距離での出入り、角度変更、素早い手の操作を重視する。"
   },
   {
     id: "practiceStaff",
-    name: "練習棒",
-    category: "長物系",
+    name: "長柄型",
+    category: "長柄系",
     type: "staff",
+    talentAffinity: "none",
     length: 1.55,
     weight: 1.15,
-    color: 0xb89056
+    color: 0xb89056,
+    description: "距離管理、先端操作、相手を近づけさせない動きを重視する。"
   },
   {
     id: "weightedTrainer",
-    name: "重り付き練習具",
+    name: "重量型",
     category: "重量武器系",
     type: "heavy",
+    talentAffinity: "none",
     length: 1.02,
     weight: 1.95,
-    color: 0x8e959d
+    color: 0x8e959d,
+    description: "重さ、体重移動、振り始めと止め方を重視する。"
   },
   {
     id: "chainTrainer",
-    name: "鎖状練習具",
+    name: "特殊操作型",
     category: "特殊武器系",
     type: "special",
+    talentAffinity: "none",
     length: 1.22,
     weight: 1.35,
-    color: 0xb9c3cc
+    color: 0xb9c3cc,
+    description: "軌道の変化、間合いのズレ、通常とは違う操作感を重視する。"
   }
 ];
+
+const hiddenTalentDefinitions = {
+  trajectory: {
+    internalId: "trajectory",
+    weaponAffinity: "blade",
+    messages: [
+      "通る線が、一瞬だけ浮いた。",
+      "身体より先に、軌道だけが見えた。",
+      "その線を通せば届く、と直感した。"
+    ]
+  },
+  core: {
+    internalId: "core",
+    weaponAffinity: "blade",
+    messages: [
+      "相手の動きの奥に、小さな点が揺れた。",
+      "守りの中に、一瞬だけ空いた場所が見えた。",
+      "そこに通せば崩れる、と身体が理解した。"
+    ]
+  },
+  time: {
+    internalId: "time",
+    weaponAffinity: "barehand",
+    messages: [
+      "世界の流れが、一拍だけ遅れた。",
+      "相手の動き出しが、妙にはっきり見えた。",
+      "一瞬の中に、選べる余白が生まれた。"
+    ]
+  },
+  unconscious: {
+    internalId: "unconscious",
+    weaponAffinity: "any",
+    messages: [
+      "意識より先に、身体が前へ出た。",
+      "考える前に、身体が戦いを続けた。",
+      "まだ倒れないという意志だけが、動きを残した。"
+    ]
+  }
+};
 
 let trainingScene = null;
 
@@ -197,11 +194,11 @@ function renderTitle() {
     <main class="screen">
       <section class="shell">
         <div class="hero">
-          <div class="kicker">Standalone Prototype</div>
+          <div class="kicker">999 Floor Tower Prototype</div>
           <h1>BATTLE<br>ORIGIN</h1>
           <p class="lead">
-            現代寄りの世界で、戦闘者たちが自分の目的に従って強くなる。
-            今回の実装は、確定している導入部分だけに絞ったプロトタイプ。
+            ある日、世界に999階の塔が現れた。
+            それから2年。人々は塔を理解できないまま、攻略し、記録し、利用し始めている。
           </p>
           <div class="actions">
             <button class="btn primary" data-action="start">始める</button>
@@ -212,234 +209,121 @@ function renderTitle() {
   `;
 }
 
-function renderEnvironmentSelect() {
-  const cards = initialEnvironments.map((env) => {
-    const disabled = env.id !== "bujin";
-    return html`
-      <article class="card ${disabled ? "disabled" : "clickable"}" ${disabled ? "" : `data-action="select-env" data-env="${env.id}"`}>
-        <div class="tag">${env.status}</div>
-        <div class="card-title" style="margin-top:12px;">${env.name}</div>
-        <div class="card-text">${env.description}</div>
-      </article>
-    `;
-  }).join("");
-
+function renderRegister() {
   app.innerHTML = screenShell({
-    breadcrumb: "初期環境の選択",
-    title: "最初にどの環境から始めるか",
+    breadcrumb: "塔出現から2年後",
+    title: "攻略者登録",
     body: html`
       <p class="muted">
-        初期環境はクラスではない。開始地点、最初の人間関係、序盤の空気だけを決める。
-        成長方向はその後の行動で変わる。
+        塔の正体は分かっていない。
+        ただ、内部には階層ごとに異なる環境、敵、資源、そして人間の限界を超える経験が存在する。
+      </p>
+      <div class="note">
+        塔の攻略中、まれに人間離れした感覚や動きを開花させる者がいる。
+        それが何なのかは、まだ明確には説明されていない。
+      </div>
+      <p class="muted">
+        攻略者は初期登録時に、攻略の軸となるメイン武器を選ぶ。
+        それは完全な縛りではないが、最初の成長方向と戦い方に大きく影響する。
+      </p>
+    `,
+    actions: `<button class="btn primary" data-action="go-weapon-select">メイン武器を選ぶ</button>`
+  });
+}
+
+function renderWeaponSelect() {
+  const cards = weapons.map((weapon) => html`
+    <article class="card clickable" data-action="choose-main-weapon" data-weapon="${weapon.id}">
+      <div class="tag">${weapon.category}</div>
+      <div class="card-title" style="margin-top:12px;">${weapon.name}</div>
+      <div class="card-text">${weapon.description}</div>
+    </article>
+  `).join("");
+
+  app.innerHTML = screenShell({
+    breadcrumb: "攻略者登録 / 初期装備",
+    title: "メイン武器を選ぶ",
+    body: html`
+      <p class="muted">
+        ここで選ぶ武器は、序盤の攻略、身体の使い方、戦闘中の異常な感覚の発現傾向に影響する。
+        ただし、画面上に才能名や確定情報は表示されない。
       </p>
       <div class="grid cards-4">${cards}</div>
     `
   });
 }
 
-function renderMartialCity() {
+function renderTowerGate() {
+  const weapon = getSelectedWeapon();
+
   app.innerHTML = screenShell({
-    breadcrumb: "初期環境：武人",
-    title: "武術都市",
+    breadcrumb: "塔入口",
+    title: "第1階層前：境界門",
     body: html`
       <p class="muted">
-        ここには道場、稽古場、試合場、武器屋、師範、門下生、流派が集まっている。
-        武人スタートでは、最初から流派を決めない。
+        塔の入口には、登録を終えた攻略者たちが集まっている。
+        国家、企業、個人、傭兵、研究者。目的は違うが、全員が上を目指している。
       </p>
       <div class="note">
-        まずはお試し場へ向かい、いろいろな武器を自分の手で触る。
-        その感覚をもとに、あとで好きな流派を探す。
+        現在のメイン武器：<strong>${weapon.name}</strong><br>
+        塔は攻略者の戦闘を記録する。
+        同じ戦い方を続ければ、塔はそれを覚え、次の敵や階層に反映してくる。
       </div>
-    `,
-    actions: `<button class="btn primary" data-action="go-lobby">お試し場へ向かう</button>`
-  });
-}
-
-function renderTrialLobby() {
-  app.innerHTML = screenShell({
-    breadcrumb: "武術都市 / お試し場",
-    title: "お試し場ロビー",
-    body: html`
       <p class="muted">
-        ロビーは広く、受付、案内板、待機している利用者がいる。
-        ここは診断を受ける場所ではなく、自分で触って、自分で決めるための施設。
+        第1階層は、塔が攻略者を測るための適応区画と呼ばれている。
+        ここで移動、両手操作、掴み、攻撃、そして塔の記録が始まる。
       </p>
-      <div class="grid cards-2">
-        <article class="card">
-          <div class="card-title">受付</div>
-          <div class="card-text">受付を済ませると、個室に案内される。</div>
-        </article>
-        <article class="card">
-          <div class="card-title">流派案内板</div>
-          <div class="card-text">武器カテゴリごとに流派を探すための案内板。武器を試したあとに見る。</div>
-        </article>
-      </div>
     `,
     actions: `
-      <button class="btn primary" data-action="go-reception">受付へ</button>
-      <button class="btn" data-action="go-board">案内板を見る</button>
+      <button class="btn primary" data-action="enter-floor">第1階層へ入る</button>
+      <button class="btn" data-action="go-weapon-select">武器を選び直す</button>
     `
   });
 }
 
-function renderReception() {
-  app.innerHTML = screenShell({
-    breadcrumb: "武術都市 / お試し場 / 受付",
-    title: "受付",
-    body: html`
-      <p class="muted">
-        受付では最低限の説明だけを受ける。
-        武器の適性評価やおすすめ診断は行わない。
-      </p>
-      <div class="note">
-        「個室内の練習具は自由にお試しください。気になる系統があれば、ロビーの案内板から対応する流派を確認できます。」
-      </div>
-    `,
-    actions: `<button class="btn primary" data-action="go-guide">基本操作を見る</button>`
-  });
-}
+function renderTowerFloor() {
+  const weapon = getSelectedWeapon();
 
-function renderControlGuide() {
-  app.innerHTML = screenShell({
-    breadcrumb: "武術都市 / お試し場 / 基本操作",
-    title: "基本操作ガイド",
-    body: html`
-      <p class="muted">
-        個室に入る前に、最低限の操作だけ確認する。
-        ここでは戦い方を指定しない。動かし方だけを知って、自分で試す。
-      </p>
-
-      <div class="guide-grid">
-        <article class="guide-card">
-          <div class="guide-illust keys-illust">
-            <span></span><b>W</b><span></span>
-            <b>A</b><i></i><b>D</b>
-            <span></span><b>S</b><span></span>
-          </div>
-          <div>
-            <h3>移動</h3>
-            <p>WASD / 方向キーで移動。Shiftでゆっくり、Spaceで短い踏み込み。</p>
-          </div>
-        </article>
-
-        <article class="guide-card">
-          <div class="guide-illust draw-illust">
-            <svg viewBox="0 0 180 120" aria-hidden="true">
-              <path d="M24 78 C58 28, 112 24, 154 70" />
-              <path d="M136 58 L154 70 L133 80" />
-            </svg>
-          </div>
-          <div>
-            <h3>手の操作</h3>
-            <p>左ドラッグで右手、右ドラッグで左手を動かす。Qは左手、Eは右手で掴む。</p>
-          </div>
-        </article>
-
-        <article class="guide-card">
-          <div class="guide-illust tap-illust">
-            <div class="tap-button">Q E R</div>
-            <div class="tap-arrow">↓</div>
-          </div>
-          <div>
-            <h3>掴む・両手持ち</h3>
-            <p>Q：左手で掴む/離す。E：右手で掴む/離す。R：両手持ち切り替え。</p>
-          </div>
-        </article>
-
-        <article class="guide-card">
-          <div class="guide-illust lock-illust">
-            <div class="lock-target">◎</div>
-            <div class="lock-label">LOCK<br>ON/OFF</div>
-          </div>
-          <div>
-            <h3>ロックオン</h3>
-            <p>ボタンまたはLでON/OFF切り替え。ONの間はマネキンを自動追尾する。</p>
-          </div>
-        </article>
-      </div>
-    `,
-    actions: `<button class="btn primary" data-action="go-trial-room">個室へ移動する</button>`
-  });
-}
-
-function renderStyleBoard() {
-  const rows = weaponCategories.map((category) => html`
-    <div class="board-row">
-      <div class="board-category">${category.name}</div>
-      <div class="board-desc">${category.description}<br><span class="muted">※具体的な流派名と道場の場所は、まだ未設定。</span></div>
-    </div>
-  `).join("");
-
-  app.innerHTML = screenShell({
-    breadcrumb: "武術都市 / お試し場 / 案内板",
-    title: "流派案内板",
-    body: html`
-      <p class="muted">
-        この案内板はおすすめを出さない。
-        武器ごとに流派カテゴリをまとめ、プレイヤーが自分で行き先を選ぶためのもの。
-      </p>
-      <div class="board">${rows}</div>
-
-      <div class="note" style="margin-top:18px;">
-        流派は、見学と稽古を中心に体験してから入門する。
-        入門後は ${styleRanks.join(" → ")} の順に立場が上がっていく。
-        また、1つの流派の中にも ${formExamples.join(" / ")} のような複数の型があり、
-        プレイヤーの戦い方によって少しずつ寄っていく。
-      </div>
-
-      <p class="footer-hint">
-        現時点ではカテゴリと仕組みだけを実装。流派名、師範、道場位置、入門条件は未決定なので入れていない。
-      </p>
-    `,
-    actions: `<button class="btn primary" data-action="go-lobby">ロビーへ戻る</button>`
-  });
-}
-
-function renderTrialRoom() {
   app.innerHTML = html`
     <main class="screen trial-screen">
       <section class="shell wide-shell">
         <div class="topbar">
-          <div class="breadcrumb">武術都市 / お試し場 / 個室</div>
-          <button class="btn ghost" data-action="go-lobby">ロビーへ戻る</button>
+          <div class="breadcrumb">999階の塔 / 第1階層 / 適応区画</div>
+          <button class="btn ghost" data-action="go-gate">境界門へ戻る</button>
         </div>
 
         <div class="room-layout three-layout">
           <aside class="side-panel">
-            <h3>個室</h3>
+            <h3>第1階層：適応区画</h3>
             <p class="muted">
-              3Dの個室。移動、ロックオン切り替え、左右の手、掴み、両手持ち、IK歩行を試せる。
-              評価表示は出ない。
+              塔の低層にある、攻略者の基礎反応を測る空間。
+              ここでの戦闘ログは塔に記録される。
             </p>
 
-            <div class="weapon-list">
-              ${weapons.map((weapon) => html`
-                <button class="weapon-btn ${weapon.id === state.selectedWeaponId ? "active" : ""}" data-action="select-weapon" data-weapon="${weapon.id}">
-                  <span class="weapon-name">${weapon.name}</span>
-                  <span class="weapon-meta">${weapon.category}</span>
-                </button>
-              `).join("")}
-            </div>
-
             <div class="stat-box">
+              <div>メイン武器：${weapon.name}</div>
               <div>移動：WASD / 方向キー / 左下パッド</div>
               <div>ゆっくり：Shift　踏み込み：Space</div>
               <div>右手：左クリック / 左ドラッグ / E</div>
               <div>左手：右クリック / 右ドラッグ / Q</div>
               <div>両手持ち：R　ロックオン：L</div>
-              <div>物理：床・壁・マネキンとの衝突</div>
-              <div>IK：腕・脚・歩行・掴み姿勢</div>
-              <div>未実装：ダメージ、成長、流派効果、対人戦</div>
+              <div>塔記録：戦闘ログを蓄積中</div>
+              <div>未実装：本格敵AI、階層移動、報酬、対人戦</div>
+            </div>
+
+            <div class="note">
+              才能は選択式ではない。
+              攻略中の行動、危機、戦い方、武器、経験の蓄積によって、まれに異常な感覚が発現する。
             </div>
 
             <div class="actions">
-              <button class="btn" data-action="go-guide">操作ガイド</button>
-              <button class="btn" data-action="go-board">案内板を見る</button>
+              <button class="btn" data-action="go-weapon-select">武器を選び直す</button>
+              <button class="btn" data-action="go-gate">境界門へ戻る</button>
             </div>
           </aside>
 
           <section class="arena-stage" id="arenaStage">
-            <canvas id="threeCanvas" aria-label="3D練習場"></canvas>
+            <canvas id="threeCanvas" aria-label="3D塔内戦闘区画"></canvas>
             <canvas id="attackTrailCanvas" class="attack-trail-canvas" aria-hidden="true"></canvas>
 
             <div class="combat-overlay top-overlay">
@@ -449,12 +333,35 @@ function renderTrialRoom() {
               <div class="overlay-hint">左ドラッグ：右手 / 右ドラッグ：左手 / Q E R</div>
             </div>
 
+            <div
+              id="towerSignal"
+              style="
+                position:absolute;
+                left:50%;
+                top:70px;
+                transform:translateX(-50%);
+                padding:10px 14px;
+                border:1px solid rgba(217,181,111,.35);
+                border-radius:999px;
+                background:rgba(5,8,14,.58);
+                color:rgba(245,232,204,.94);
+                font-size:13px;
+                letter-spacing:.04em;
+                opacity:0;
+                pointer-events:none;
+                transition:opacity .18s ease;
+                text-align:center;
+                max-width:82%;
+                z-index:6;
+              "
+            ></div>
+
             <div class="move-stick" id="moveStick" aria-label="移動パッド">
               <div class="move-stick-base"></div>
               <div class="move-stick-knob" id="moveStickKnob"></div>
             </div>
 
-            <div class="attack-zone-hint">手操作エリア</div>
+            <div class="attack-zone-hint">塔内戦闘区画</div>
           </section>
         </div>
       </section>
@@ -477,6 +384,10 @@ function renderTrialRoom() {
 }
 
 function getSelectedWeapon() {
+  if (!state.selectedWeaponId) {
+    state.selectedWeaponId = state.mainWeaponId || "barehand";
+  }
+
   return weapons.find((weapon) => weapon.id === state.selectedWeaponId) ?? weapons[0];
 }
 
@@ -490,26 +401,17 @@ function render() {
     case SCREENS.TITLE:
       renderTitle();
       break;
-    case SCREENS.ENV_SELECT:
-      renderEnvironmentSelect();
+    case SCREENS.REGISTER:
+      renderRegister();
       break;
-    case SCREENS.MARTIAL_CITY:
-      renderMartialCity();
+    case SCREENS.WEAPON_SELECT:
+      renderWeaponSelect();
       break;
-    case SCREENS.TRIAL_LOBBY:
-      renderTrialLobby();
+    case SCREENS.TOWER_GATE:
+      renderTowerGate();
       break;
-    case SCREENS.RECEPTION:
-      renderReception();
-      break;
-    case SCREENS.CONTROL_GUIDE:
-      renderControlGuide();
-      break;
-    case SCREENS.TRIAL_ROOM:
-      renderTrialRoom();
-      break;
-    case SCREENS.STYLE_BOARD:
-      renderStyleBoard();
+    case SCREENS.TOWER_FLOOR:
+      renderTowerFloor();
       break;
     default:
       renderTitle();
@@ -523,61 +425,47 @@ document.addEventListener("click", (event) => {
   const action = target.dataset.action;
 
   if (action === "reset") {
-    state.initialEnvironment = null;
-    setScreen(SCREENS.TITLE);
+    state.screen = SCREENS.TITLE;
+    state.mainWeaponId = null;
+    state.selectedWeaponId = null;
+    state.hiddenTalent.internalId = null;
+    state.hiddenTalent.stage = 0;
+    state.hiddenTalent.echoes = [];
+    render();
     return;
   }
 
   if (action === "start") {
-    setScreen(SCREENS.ENV_SELECT);
+    setScreen(SCREENS.REGISTER);
     return;
   }
 
-  if (action === "select-env") {
-    const env = target.dataset.env;
-    if (env !== "bujin") return;
-    state.initialEnvironment = env;
-    setScreen(SCREENS.MARTIAL_CITY);
+  if (action === "go-weapon-select") {
+    setScreen(SCREENS.WEAPON_SELECT);
     return;
   }
 
-  if (action === "go-lobby") {
-    setScreen(SCREENS.TRIAL_LOBBY);
+  if (action === "choose-main-weapon") {
+    state.mainWeaponId = target.dataset.weapon;
+    state.selectedWeaponId = state.mainWeaponId;
+    setScreen(SCREENS.TOWER_GATE);
     return;
   }
 
-  if (action === "go-reception") {
-    setScreen(SCREENS.RECEPTION);
+  if (action === "go-gate") {
+    setScreen(SCREENS.TOWER_GATE);
     return;
   }
 
-  if (action === "go-guide") {
-    setScreen(SCREENS.CONTROL_GUIDE);
-    return;
-  }
-
-  if (action === "go-trial-room") {
-    setScreen(SCREENS.TRIAL_ROOM);
-    return;
-  }
-
-  if (action === "go-board") {
-    setScreen(SCREENS.STYLE_BOARD);
+  if (action === "enter-floor") {
+    state.towerMemory.battles += 1;
+    setScreen(SCREENS.TOWER_FLOOR);
     return;
   }
 
   if (action === "toggle-lock") {
     state.lockOn = !state.lockOn;
     updateLockButton();
-    return;
-  }
-
-  if (action === "select-weapon") {
-    state.selectedWeaponId = target.dataset.weapon;
-
-    if (state.screen === SCREENS.TRIAL_ROOM) {
-      renderTrialRoom();
-    }
   }
 });
 
@@ -662,6 +550,35 @@ class TrainingScene3D {
 
     this.cameraTarget = new THREE.Vector3(0, 1.15, 0);
     this.cameraCurrent = new THREE.Vector3(0, 4.8, 9.2);
+    this.cameraShake = 0;
+    this.hitStop = 0;
+    this.hitCooldown = 0;
+
+    this.visionGroup = null;
+    this.coreMarker = null;
+
+    this.towerStats = {
+      contacts: 0,
+      rightHandUses: 0,
+      leftHandUses: 0,
+      grabs: 0,
+      dashUses: 0,
+      closeRangeTime: 0,
+      bladeArcActions: 0,
+      barehandActions: 0,
+      pressureMoments: 0,
+      limitPressure: 0
+    };
+
+    this.talentCooldown = 0;
+    this.talentEffects = {
+      trajectory: 0,
+      core: 0,
+      time: 0,
+      unconscious: 0,
+      message: "",
+      messageTimer: 0
+    };
 
     this.trailCtx = this.trailCanvas.getContext("2d");
 
@@ -685,8 +602,8 @@ class TrainingScene3D {
     if (!this.running) return;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x0a0d14);
-    this.scene.fog = new THREE.Fog(0x0a0d14, 13, 28);
+    this.scene.background = new THREE.Color(0x070a12);
+    this.scene.fog = new THREE.Fog(0x070a12, 13, 30);
 
     this.camera = new THREE.PerspectiveCamera(56, 1, 0.1, 100);
 
@@ -772,11 +689,11 @@ class TrainingScene3D {
     const gravity = { x: 0.0, y: 0.0, z: 0.0 };
     this.physicsWorld = new RAPIER.World(gravity);
 
-    const floorCollider = RAPIER.ColliderDesc
-      .cuboid(ROOM_HALF_SIZE, 0.06, ROOM_HALF_SIZE)
-      .setTranslation(0, -0.06, 0);
-
-    this.physicsWorld.createCollider(floorCollider);
+    this.physicsWorld.createCollider(
+      RAPIER.ColliderDesc
+        .cuboid(ROOM_HALF_SIZE, 0.06, ROOM_HALF_SIZE)
+        .setTranslation(0, -0.06, 0)
+    );
 
     const wallHeight = 3.2;
     const wallThickness = 0.16;
@@ -827,10 +744,10 @@ class TrainingScene3D {
   }
 
   buildScene() {
-    const ambient = new THREE.HemisphereLight(0xdce8ff, 0x1d2430, 1.8);
+    const ambient = new THREE.HemisphereLight(0xdce8ff, 0x101522, 1.65);
     this.scene.add(ambient);
 
-    const key = new THREE.DirectionalLight(0xffffff, 2.6);
+    const key = new THREE.DirectionalLight(0xffffff, 2.5);
     key.position.set(5, 8, 6);
     key.castShadow = true;
     key.shadow.mapSize.width = 2048;
@@ -838,8 +755,8 @@ class TrainingScene3D {
     this.scene.add(key);
 
     const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x151a24,
-      roughness: 0.85,
+      color: 0x111722,
+      roughness: 0.86,
       metalness: 0.03
     });
 
@@ -860,6 +777,19 @@ class TrainingScene3D {
     this.mannequinGroup.scale.setScalar(MANNEQUIN_VISUAL_SCALE);
     this.scene.add(this.mannequinGroup);
 
+    this.visionGroup = new THREE.Group();
+    this.scene.add(this.visionGroup);
+
+    const coreMat = new THREE.MeshBasicMaterial({
+      color: 0xffe1a0,
+      transparent: true,
+      opacity: 0
+    });
+
+    this.coreMarker = new THREE.Mesh(new THREE.SphereGeometry(0.07, 18, 18), coreMat);
+    this.coreMarker.visible = false;
+    this.scene.add(this.coreMarker);
+
     this.createWorldPracticeObjects();
     this.createWeaponForSelected();
     this.updateRig(0.016);
@@ -867,7 +797,7 @@ class TrainingScene3D {
 
   addRoomWalls() {
     const wallMat = new THREE.MeshStandardMaterial({
-      color: 0x202838,
+      color: 0x1d2637,
       roughness: 0.9
     });
 
@@ -1065,13 +995,14 @@ class TrainingScene3D {
   createMannequin() {
     const group = new THREE.Group();
 
-    const wood = new THREE.MeshStandardMaterial({
-      color: 0x9b7447,
-      roughness: 0.92
+    const towerMat = new THREE.MeshStandardMaterial({
+      color: 0x8f978f,
+      roughness: 0.9,
+      metalness: 0.05
     });
 
-    const jointWood = new THREE.MeshStandardMaterial({
-      color: 0x80613d,
+    const jointMat = new THREE.MeshStandardMaterial({
+      color: 0x616a68,
       roughness: 0.94
     });
 
@@ -1082,18 +1013,18 @@ class TrainingScene3D {
       emissiveIntensity: 0.05
     });
 
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.54, 0.14, 24), wood);
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.44, 0.54, 0.14, 24), towerMat);
     base.position.y = 0.07;
     base.castShadow = true;
     base.receiveShadow = true;
 
-    const pelvis = createBoxPart(new THREE.Vector3(0.46, 0.18, 0.28), new THREE.Vector3(0, 0.72, 0), wood);
-    const abdomen = createLimb(new THREE.Vector3(0, 0.80, 0), new THREE.Vector3(0, 1.02, -0.01), 0.22, wood, 18);
-    const lowerTorso = createLimb(new THREE.Vector3(0, 1.00, -0.01), new THREE.Vector3(0, 1.20, -0.02), 0.27, wood, 18);
-    const upperTorso = createLimb(new THREE.Vector3(0, 1.18, -0.02), new THREE.Vector3(0, 1.38, -0.03), 0.31, wood, 18);
-    const neck = createLimb(new THREE.Vector3(0, 1.42, -0.02), new THREE.Vector3(0, 1.53, -0.02), 0.08, jointWood, 12);
+    const pelvis = createBoxPart(new THREE.Vector3(0.46, 0.18, 0.28), new THREE.Vector3(0, 0.72, 0), towerMat);
+    const abdomen = createLimb(new THREE.Vector3(0, 0.80, 0), new THREE.Vector3(0, 1.02, -0.01), 0.22, towerMat, 18);
+    const lowerTorso = createLimb(new THREE.Vector3(0, 1.00, -0.01), new THREE.Vector3(0, 1.20, -0.02), 0.27, towerMat, 18);
+    const upperTorso = createLimb(new THREE.Vector3(0, 1.18, -0.02), new THREE.Vector3(0, 1.38, -0.03), 0.31, towerMat, 18);
+    const neck = createLimb(new THREE.Vector3(0, 1.42, -0.02), new THREE.Vector3(0, 1.53, -0.02), 0.08, jointMat, 12);
 
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 20, 20), wood);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.21, 20, 20), towerMat);
     head.position.y = 1.71;
     head.castShadow = true;
 
@@ -1101,71 +1032,45 @@ class TrainingScene3D {
       new THREE.Vector3(-0.41, 1.32, -0.02),
       new THREE.Vector3(0.41, 1.32, -0.02),
       0.055,
-      wood,
+      towerMat,
       12
     );
 
-    const leftShoulder = createJoint(new THREE.Vector3(-0.45, 1.31, -0.02), 0.08, jointWood);
-    const rightShoulder = createJoint(new THREE.Vector3(0.45, 1.31, -0.02), 0.08, jointWood);
+    const leftShoulder = createJoint(new THREE.Vector3(-0.45, 1.31, -0.02), 0.08, jointMat);
+    const rightShoulder = createJoint(new THREE.Vector3(0.45, 1.31, -0.02), 0.08, jointMat);
 
-    const leftUpperArm = createLimb(
-      new THREE.Vector3(-0.47, 1.28, -0.02),
-      new THREE.Vector3(-0.62, 1.06, 0.00),
-      0.055,
-      wood,
-      12
-    );
+    const leftUpperArm = createLimb(new THREE.Vector3(-0.47, 1.28, -0.02), new THREE.Vector3(-0.62, 1.06, 0.00), 0.055, towerMat, 12);
+    const rightUpperArm = createLimb(new THREE.Vector3(0.47, 1.28, -0.02), new THREE.Vector3(0.62, 1.06, 0.00), 0.055, towerMat, 12);
 
-    const rightUpperArm = createLimb(
-      new THREE.Vector3(0.47, 1.28, -0.02),
-      new THREE.Vector3(0.62, 1.06, 0.00),
-      0.055,
-      wood,
-      12
-    );
+    const leftElbow = createJoint(new THREE.Vector3(-0.62, 1.06, 0.00), 0.055, jointMat);
+    const rightElbow = createJoint(new THREE.Vector3(0.62, 1.06, 0.00), 0.055, jointMat);
 
-    const leftElbow = createJoint(new THREE.Vector3(-0.62, 1.06, 0.00), 0.055, jointWood);
-    const rightElbow = createJoint(new THREE.Vector3(0.62, 1.06, 0.00), 0.055, jointWood);
+    const leftForearm = createLimb(new THREE.Vector3(-0.62, 1.04, 0.00), new THREE.Vector3(-0.52, 0.86, -0.15), 0.045, towerMat, 12);
+    const rightForearm = createLimb(new THREE.Vector3(0.62, 1.04, 0.00), new THREE.Vector3(0.52, 0.86, -0.15), 0.045, towerMat, 12);
 
-    const leftForearm = createLimb(
-      new THREE.Vector3(-0.62, 1.04, 0.00),
-      new THREE.Vector3(-0.52, 0.86, -0.15),
-      0.045,
-      wood,
-      12
-    );
+    const leftWrist = createJoint(new THREE.Vector3(-0.52, 0.86, -0.15), 0.040, jointMat);
+    const rightWrist = createJoint(new THREE.Vector3(0.52, 0.86, -0.15), 0.040, jointMat);
 
-    const rightForearm = createLimb(
-      new THREE.Vector3(0.62, 1.04, 0.00),
-      new THREE.Vector3(0.52, 0.86, -0.15),
-      0.045,
-      wood,
-      12
-    );
+    const leftHand = createBoxPart(new THREE.Vector3(0.09, 0.055, 0.13), new THREE.Vector3(-0.50, 0.82, -0.23), towerMat);
+    const rightHand = createBoxPart(new THREE.Vector3(0.09, 0.055, 0.13), new THREE.Vector3(0.50, 0.82, -0.23), towerMat);
 
-    const leftWrist = createJoint(new THREE.Vector3(-0.52, 0.86, -0.15), 0.040, jointWood);
-    const rightWrist = createJoint(new THREE.Vector3(0.52, 0.86, -0.15), 0.040, jointWood);
+    const leftHip = createJoint(new THREE.Vector3(-0.18, 0.65, 0), 0.07, jointMat);
+    const rightHip = createJoint(new THREE.Vector3(0.18, 0.65, 0), 0.07, jointMat);
 
-    const leftHand = createBoxPart(new THREE.Vector3(0.09, 0.055, 0.13), new THREE.Vector3(-0.50, 0.82, -0.23), wood);
-    const rightHand = createBoxPart(new THREE.Vector3(0.09, 0.055, 0.13), new THREE.Vector3(0.50, 0.82, -0.23), wood);
+    const leftThigh = createLimb(new THREE.Vector3(-0.18, 0.62, 0), new THREE.Vector3(-0.20, 0.38, -0.01), 0.075, towerMat, 12);
+    const rightThigh = createLimb(new THREE.Vector3(0.18, 0.62, 0), new THREE.Vector3(0.20, 0.38, -0.01), 0.075, towerMat, 12);
 
-    const leftHip = createJoint(new THREE.Vector3(-0.18, 0.65, 0), 0.07, jointWood);
-    const rightHip = createJoint(new THREE.Vector3(0.18, 0.65, 0), 0.07, jointWood);
+    const leftKnee = createJoint(new THREE.Vector3(-0.20, 0.37, -0.01), 0.058, jointMat);
+    const rightKnee = createJoint(new THREE.Vector3(0.20, 0.37, -0.01), 0.058, jointMat);
 
-    const leftThigh = createLimb(new THREE.Vector3(-0.18, 0.62, 0), new THREE.Vector3(-0.20, 0.38, -0.01), 0.075, wood, 12);
-    const rightThigh = createLimb(new THREE.Vector3(0.18, 0.62, 0), new THREE.Vector3(0.20, 0.38, -0.01), 0.075, wood, 12);
+    const leftShin = createLimb(new THREE.Vector3(-0.20, 0.34, -0.01), new THREE.Vector3(-0.21, 0.16, -0.02), 0.055, towerMat, 12);
+    const rightShin = createLimb(new THREE.Vector3(0.20, 0.34, -0.01), new THREE.Vector3(0.21, 0.16, -0.02), 0.055, towerMat, 12);
 
-    const leftKnee = createJoint(new THREE.Vector3(-0.20, 0.37, -0.01), 0.058, jointWood);
-    const rightKnee = createJoint(new THREE.Vector3(0.20, 0.37, -0.01), 0.058, jointWood);
+    const leftAnkle = createJoint(new THREE.Vector3(-0.21, 0.14, -0.02), 0.045, jointMat);
+    const rightAnkle = createJoint(new THREE.Vector3(0.21, 0.14, -0.02), 0.045, jointMat);
 
-    const leftShin = createLimb(new THREE.Vector3(-0.20, 0.34, -0.01), new THREE.Vector3(-0.21, 0.16, -0.02), 0.055, wood, 12);
-    const rightShin = createLimb(new THREE.Vector3(0.20, 0.34, -0.01), new THREE.Vector3(0.21, 0.16, -0.02), 0.055, wood, 12);
-
-    const leftAnkle = createJoint(new THREE.Vector3(-0.21, 0.14, -0.02), 0.045, jointWood);
-    const rightAnkle = createJoint(new THREE.Vector3(0.21, 0.14, -0.02), 0.045, jointWood);
-
-    const leftFoot = createBoxPart(new THREE.Vector3(0.14, 0.055, 0.22), new THREE.Vector3(-0.21, 0.08, -0.09), wood);
-    const rightFoot = createBoxPart(new THREE.Vector3(0.14, 0.055, 0.22), new THREE.Vector3(0.21, 0.08, -0.09), wood);
+    const leftFoot = createBoxPart(new THREE.Vector3(0.14, 0.055, 0.22), new THREE.Vector3(-0.21, 0.08, -0.09), towerMat);
+    const rightFoot = createBoxPart(new THREE.Vector3(0.14, 0.055, 0.22), new THREE.Vector3(0.21, 0.08, -0.09), towerMat);
 
     const markerLine = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.32), marker);
     markerLine.position.set(0, 1.26, -0.26);
@@ -1242,7 +1147,7 @@ class TrainingScene3D {
 
     const object = {
       id: `prop_block_${cryptoRandomId()}`,
-      name: "練習用ブロック",
+      name: "塔片",
       type: "prop",
       mesh: block,
       weight: 1.2,
@@ -1289,7 +1194,6 @@ class TrainingScene3D {
   createGrabbableFromWeapon(weapon, position, selectedObject) {
     const mesh = this.createWeaponMesh(weapon);
     mesh.position.copy(position);
-    mesh.castShadow = true;
 
     mesh.traverse((obj) => {
       if (obj.isMesh) {
@@ -1302,6 +1206,7 @@ class TrainingScene3D {
       id: `${weapon.id}_${cryptoRandomId()}`,
       name: weapon.name,
       type: weapon.type,
+      talentAffinity: weapon.talentAffinity,
       mesh,
       weight: weapon.weight,
       length: weapon.length,
@@ -1409,10 +1314,21 @@ class TrainingScene3D {
   loop() {
     if (!this.running) return;
 
-    const dt = Math.min(this.clock.getDelta(), 0.033);
+    const rawDt = Math.min(this.clock.getDelta(), 0.033);
+
+    let dt = rawDt;
+
+    if (this.hitStop > 0) {
+      this.hitStop = Math.max(0, this.hitStop - rawDt);
+      dt *= 0.18;
+    }
+
+    if (this.talentEffects.time > 0) {
+      dt *= 0.82;
+    }
 
     this.createWeaponForSelected();
-    this.update(dt);
+    this.update(dt, rawDt);
 
     this.renderer.render(this.scene, this.camera);
     this.drawAttackTrail();
@@ -1420,16 +1336,20 @@ class TrainingScene3D {
     this.frameId = requestAnimationFrame(() => this.loop());
   }
 
-  update(dt) {
+  update(dt, rawDt) {
     this.player.dashCooldown = Math.max(0, this.player.dashCooldown - dt);
+    this.hitCooldown = Math.max(0, this.hitCooldown - rawDt);
+    this.talentCooldown = Math.max(0, this.talentCooldown - rawDt);
 
     this.updateMovement(dt);
     this.updateFacing(dt);
     this.updateHandControls(dt);
     this.updateRig(dt);
     this.updateHeldObjects(dt);
+    this.updateTalentVisuals(rawDt);
     this.updateCamera(dt);
-    this.updateHitReaction(dt);
+    this.updateHitReaction(rawDt);
+    this.updateTowerSignal(rawDt);
   }
 
   updateMovement(dt) {
@@ -1539,6 +1459,14 @@ class TrainingScene3D {
       this.walkPhase += dt * lerp(5.2, 9.2, this.moveAmount);
     }
 
+    const distanceToTarget = this.player.position.distanceTo(this.mannequinGroup.position);
+
+    if (distanceToTarget < 1.75) {
+      this.towerStats.closeRangeTime += dt;
+      state.towerMemory.closeRangeTime += dt;
+      this.towerStats.limitPressure += dt * 0.8;
+    }
+
     if (input.lengthSq() > 0.001 && !this.getLockOn()) {
       this.player.yaw = Math.atan2(-this.lastVisualMove.x, -this.lastVisualMove.z);
     }
@@ -1590,15 +1518,17 @@ class TrainingScene3D {
     const pelvisYaw = Math.sin(phase) * 0.11 * move;
     const pelvisRoll = Math.sin(phase * 2) * 0.035 * move;
 
-    const pelvis = new THREE.Vector3(sideSway, 0.78 + bob, 0);
+    const unconsciousLean = this.talentEffects.unconscious > 0 ? 0.10 * this.talentEffects.unconscious : 0;
+
+    const pelvis = new THREE.Vector3(sideSway, 0.78 + bob, -unconsciousLean * 0.1);
     const abdomenA = pelvis.clone().add(new THREE.Vector3(0, 0.08, 0));
-    const abdomenB = new THREE.Vector3(-sideSway * 0.35, 1.10 + bob * 0.6, -0.01);
+    const abdomenB = new THREE.Vector3(-sideSway * 0.35, 1.10 + bob * 0.6, -0.01 - unconsciousLean * 0.05);
 
     const lowerChestA = abdomenB.clone();
-    const lowerChestB = new THREE.Vector3(-sideSway * 0.55, 1.31 + bob * 0.45, -0.03);
+    const lowerChestB = new THREE.Vector3(-sideSway * 0.55, 1.31 + bob * 0.45, -0.03 - unconsciousLean * 0.08);
 
     const upperChestA = lowerChestB.clone();
-    const upperChestB = new THREE.Vector3(-sideSway * 0.70, 1.49 + bob * 0.28, -0.04);
+    const upperChestB = new THREE.Vector3(-sideSway * 0.70, 1.49 + bob * 0.28, -0.04 - unconsciousLean * 0.1);
 
     const neckA = upperChestB.clone().add(new THREE.Vector3(0, 0.03, 0.02));
     const neckB = neckA.clone().add(new THREE.Vector3(0, 0.11, 0));
@@ -1639,7 +1569,7 @@ class TrainingScene3D {
     this.solveLegIK("left", leftHip, leftFootTarget);
     this.solveLegIK("right", rightHip, rightFootTarget);
 
-    rig.boxes.facingMark.position.set(-sideSway * 0.75, 1.42 + bob * 0.3, -0.36);
+    rig.boxes.facingMark.position.set(-sideSway * 0.75, 1.42 + bob * 0.3, -0.36 - unconsciousLean * 0.08);
     rig.boxes.facingMark.rotation.set(0, pelvisYaw * -0.35, 0);
   }
 
@@ -1677,16 +1607,17 @@ class TrainingScene3D {
         );
       }
     } else if (otherHand.heldObject && otherHand.heldObject.holders.size >= 2) {
-      base.set(
-        sign * 0.34,
-        0.93,
-        -0.45
-      );
+      base.set(sign * 0.34, 0.93, -0.45);
     }
 
     base.x += hand.controlX * 0.34;
     base.y += -hand.controlY * 0.18;
     base.z += -hand.thrust * 0.55 - hand.reachPulse * 0.15;
+
+    if (this.talentEffects.unconscious > 0) {
+      base.z -= 0.12 * this.talentEffects.unconscious;
+      base.y += 0.03 * this.talentEffects.unconscious;
+    }
 
     const maxReach = 0.61;
     const fromShoulder = base.clone().sub(shoulder);
@@ -1807,7 +1738,6 @@ class TrainingScene3D {
       handledObjects.add(object);
 
       const holders = Array.from(object.holders);
-
       if (holders.length === 0) continue;
 
       const primary = object.primaryHand || holders[0];
@@ -1845,6 +1775,75 @@ class TrainingScene3D {
 
       const lag = clamp(object.weight - 1, 0, 1.2) * 0.08;
       object.mesh.position.y -= lag * this.moveAmount;
+    }
+  }
+
+  updateTalentVisuals(dt) {
+    this.talentEffects.trajectory = Math.max(0, this.talentEffects.trajectory - dt);
+    this.talentEffects.core = Math.max(0, this.talentEffects.core - dt);
+    this.talentEffects.time = Math.max(0, this.talentEffects.time - dt);
+    this.talentEffects.unconscious = Math.max(0, this.talentEffects.unconscious - dt);
+
+    if (this.visionGroup) {
+      this.visionGroup.clear();
+
+      if (this.talentEffects.trajectory > 0) {
+        const alpha = clamp(this.talentEffects.trajectory / 1.6, 0, 1);
+        const start = this.getHandWorldPosition("right");
+        const target = this.mannequinGroup.position.clone();
+        target.y = 0.95;
+
+        const curveMid = start.clone().lerp(target, 0.52);
+        curveMid.y += 0.28;
+
+        const points = [
+          start,
+          curveMid,
+          target
+        ];
+
+        const lineMat = new THREE.LineBasicMaterial({
+          color: 0xffe3a4,
+          transparent: true,
+          opacity: 0.25 + alpha * 0.55
+        });
+
+        const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), lineMat);
+        this.visionGroup.add(line);
+      }
+    }
+
+    if (this.coreMarker) {
+      if (this.talentEffects.core > 0) {
+        const alpha = clamp(this.talentEffects.core / 1.6, 0, 1);
+        const pulse = 1 + Math.sin(performance.now() * 0.018) * 0.25;
+
+        this.coreMarker.visible = true;
+        this.coreMarker.material.opacity = 0.2 + alpha * 0.75;
+        this.coreMarker.scale.setScalar(pulse);
+
+        const p = this.mannequinGroup.position.clone();
+        p.y = 0.93;
+        p.z -= 0.24;
+        this.coreMarker.position.copy(p);
+      } else {
+        this.coreMarker.visible = false;
+        this.coreMarker.material.opacity = 0;
+      }
+    }
+  }
+
+  updateTowerSignal(dt) {
+    const signal = document.getElementById("towerSignal");
+    if (!signal) return;
+
+    this.talentEffects.messageTimer = Math.max(0, this.talentEffects.messageTimer - dt);
+
+    if (this.talentEffects.messageTimer > 0) {
+      signal.textContent = this.talentEffects.message;
+      signal.style.opacity = "1";
+    } else {
+      signal.style.opacity = "0";
     }
   }
 
@@ -1918,7 +1917,17 @@ class TrainingScene3D {
 
     this.cameraCurrent.lerp(desiredPosition, 1 - Math.exp(-5.8 * dt));
 
-    this.camera.position.copy(this.cameraCurrent);
+    this.cameraShake = Math.max(0, this.cameraShake - dt * 4.6);
+
+    const shake = this.cameraShake > 0
+      ? new THREE.Vector3(
+        (Math.random() - 0.5) * 0.06 * this.cameraShake,
+        (Math.random() - 0.5) * 0.04 * this.cameraShake,
+        (Math.random() - 0.5) * 0.06 * this.cameraShake
+      )
+      : new THREE.Vector3();
+
+    this.camera.position.copy(this.cameraCurrent).add(shake);
     this.camera.lookAt(this.cameraTarget);
   }
 
@@ -1934,6 +1943,13 @@ class TrainingScene3D {
         flash = 1;
         break;
       }
+    }
+
+    if (flash && this.hitCooldown <= 0) {
+      this.hitCooldown = 0.18;
+      this.hitStop = 0.045;
+      this.cameraShake = Math.max(this.cameraShake, 1);
+      this.registerContact();
     }
 
     for (const side of ["left", "right"]) {
@@ -1954,6 +1970,113 @@ class TrainingScene3D {
         obj.material.emissiveIntensity = hitFlash * 0.45;
       }
     });
+  }
+
+  registerContact() {
+    this.towerStats.contacts += 1;
+    state.towerMemory.totalContacts += 1;
+    this.towerStats.limitPressure += 0.85;
+
+    const weapon = this.getWeapon();
+
+    if (weapon.talentAffinity === "blade") {
+      this.maybeAwakenHiddenTalent("blade_contact");
+    } else if (weapon.talentAffinity === "barehand") {
+      this.maybeAwakenHiddenTalent("barehand_contact");
+    }
+
+    if (this.towerStats.limitPressure > 6 && this.towerStats.contacts > 4) {
+      this.maybeAwakenHiddenTalent("limit_pressure");
+    }
+  }
+
+  maybeAwakenHiddenTalent(reason) {
+    if (this.talentCooldown > 0) return;
+
+    const weapon = this.getWeapon();
+    const candidates = [];
+
+    if (weapon.talentAffinity === "blade") {
+      candidates.push("trajectory", "core");
+    }
+
+    if (weapon.talentAffinity === "barehand") {
+      candidates.push("time");
+    }
+
+    if (reason === "limit_pressure" && this.towerStats.limitPressure > 6) {
+      candidates.push("unconscious");
+    }
+
+    if (candidates.length === 0) return;
+
+    let possible = candidates;
+
+    if (state.hiddenTalent.internalId) {
+      possible = candidates.filter((id) => id === state.hiddenTalent.internalId || id === "unconscious");
+
+      if (possible.length === 0) return;
+    }
+
+    let chance = 0.045;
+
+    if (reason === "blade_arc") chance = 0.055;
+    if (reason === "barehand_contact") chance = 0.055;
+    if (reason === "limit_pressure") chance = 0.035;
+    if (state.hiddenTalent.stage > 0) chance += 0.025;
+
+    if (Math.random() > chance) return;
+
+    const chosen = possible[Math.floor(Math.random() * possible.length)];
+    this.triggerHiddenTalent(chosen);
+  }
+
+  triggerHiddenTalent(id) {
+    const definition = hiddenTalentDefinitions[id];
+    if (!definition) return;
+
+    if (!state.hiddenTalent.internalId || state.hiddenTalent.internalId === id) {
+      state.hiddenTalent.internalId = id;
+      state.hiddenTalent.stage = Math.min(6, state.hiddenTalent.stage + 1);
+    }
+
+    const message = definition.messages[Math.floor(Math.random() * definition.messages.length)];
+
+    state.hiddenTalent.echoes.push({
+      text: message,
+      at: Date.now()
+    });
+
+    if (state.hiddenTalent.echoes.length > 8) {
+      state.hiddenTalent.echoes.shift();
+    }
+
+    this.talentEffects.message = message;
+    this.talentEffects.messageTimer = 2.4;
+    this.talentCooldown = 1.6;
+
+    if (id === "trajectory") {
+      this.talentEffects.trajectory = 1.6;
+      this.cameraShake = Math.max(this.cameraShake, 0.45);
+    }
+
+    if (id === "core") {
+      this.talentEffects.core = 1.6;
+      this.cameraShake = Math.max(this.cameraShake, 0.35);
+    }
+
+    if (id === "time") {
+      this.talentEffects.time = 1.4;
+      this.cameraShake = Math.max(this.cameraShake, 0.25);
+    }
+
+    if (id === "unconscious") {
+      this.talentEffects.unconscious = 1.1;
+      this.stepBurst = Math.max(this.stepBurst, 2.4);
+      this.hands.left.thrustVelocity = Math.max(this.hands.left.thrustVelocity, 4.2);
+      this.hands.right.thrustVelocity = Math.max(this.hands.right.thrustVelocity, 4.2);
+      this.cameraShake = Math.max(this.cameraShake, 0.85);
+    }
   }
 
   getInteractionPoints() {
@@ -2014,6 +2137,10 @@ class TrainingScene3D {
     if (key === " " && this.player.dashCooldown <= 0) {
       this.stepBurst = 4.2;
       this.player.dashCooldown = 0.45;
+      this.towerStats.dashUses += 1;
+      state.towerMemory.dashes += 1;
+      this.towerStats.limitPressure += 0.55;
+      this.maybeAwakenHiddenTalent("limit_pressure");
     }
   }
 
@@ -2034,6 +2161,8 @@ class TrainingScene3D {
     if (nearest) {
       this.forceGrab(side, nearest);
       hand.reachPulse = 1;
+      this.towerStats.grabs += 1;
+      state.towerMemory.grabs += 1;
     }
   }
 
@@ -2214,6 +2343,22 @@ class TrainingScene3D {
     this.pointerAttack.lastY = point.y;
     this.pointerAttack.startTime = performance.now();
     this.pointerAttack.points = [{ x: point.x, y: point.y, life: 1, hand }];
+
+    if (hand === "left") {
+      this.towerStats.leftHandUses += 1;
+      state.towerMemory.leftHandUses += 1;
+    } else {
+      this.towerStats.rightHandUses += 1;
+      state.towerMemory.rightHandUses += 1;
+    }
+
+    const weapon = this.getWeapon();
+
+    if (weapon.talentAffinity === "barehand") {
+      this.towerStats.barehandActions += 1;
+      state.towerMemory.barehandActions += 1;
+      this.maybeAwakenHiddenTalent("barehand_contact");
+    }
   }
 
   onAttackMove(event) {
@@ -2244,6 +2389,18 @@ class TrainingScene3D {
       life: 1,
       hand: this.pointerAttack.hand
     });
+
+    const weapon = this.getWeapon();
+    const movementMagnitude = Math.abs(dx) + Math.abs(dy);
+
+    if (weapon.talentAffinity === "blade" && movementMagnitude > 0.012) {
+      this.towerStats.bladeArcActions += 1;
+      state.towerMemory.bladeArcActions += 1;
+
+      if (this.towerStats.bladeArcActions % 7 === 0) {
+        this.maybeAwakenHiddenTalent("blade_arc");
+      }
+    }
   }
 
   onAttackUp(event) {
@@ -2263,6 +2420,7 @@ class TrainingScene3D {
     if (duration < 230 && distance < 18) {
       hand.thrustVelocity = 8.5;
       hand.reachPulse = 0.8;
+      this.towerStats.limitPressure += 0.35;
     }
 
     this.pointerAttack.active = false;
@@ -2359,10 +2517,17 @@ class TrainingScene3D {
       const b = this.pointerAttack.points[i];
 
       const alpha = Math.max(0, Math.min(a.life, b.life));
+      const talentBoost =
+        this.talentEffects.trajectory > 0 ||
+        this.talentEffects.core > 0 ||
+        this.talentEffects.time > 0
+          ? 1.35
+          : 1;
+
       const color = b.hand === "left" ? "146, 190, 255" : "217, 181, 111";
 
       ctx.strokeStyle = `rgba(${color}, ${alpha * 0.8})`;
-      ctx.lineWidth = 4 + alpha * 4;
+      ctx.lineWidth = (4 + alpha * 4) * talentBoost;
 
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
